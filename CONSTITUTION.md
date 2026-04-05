@@ -1,30 +1,34 @@
-# Constitution
+# 팀 헌장 (Constitution)
 
-Overarching principles that apply to all projects by this team.
+팀의 모든 프로젝트에 적용되는 공통 원칙.
 
-## Code Quality
+## 언어
 
-- Prefer simplicity over cleverness. The simplest solution that meets requirements is the right solution.
-- No speculative abstractions. Build for current needs, not hypothetical future ones.
-- No unnecessary comments. Code should be self-evident; comments explain *why*, not *what*.
-- Security at boundaries. Validate external input; trust internal logic and framework guarantees.
-- Never hardcode secrets, credentials, or API keys in source code. Always use environment variables or `.env` files (gitignored). This applies even for local-only development — hardcoded secrets create deployment risks and bad habits.
+- 모든 문서는 한국어를 기본으로 작성한다. 코드, 명령어, 기술 용어, 파일 경로 등 영어가 필수인 경우에만 영어를 사용한다.
 
-## Testing
+## 코드 품질
 
-- Tests are written alongside implementation, not after. Never defer test writing to a later iteration.
-- Frontend E2E tests use Playwright (`npx playwright`). Backend API tests use appropriate tooling per project.
-- Test scenarios are defined by Hawkeye in SPEC.md as part of Success Criteria, before implementation begins.
-- Breda runs all tests and includes results in the completion report to Roy.
-- As projects grow, manual test execution transitions to automated CI runs — but scenarios written early remain valid.
+- 복잡함보다 단순함을 우선한다. 요건을 충족하는 가장 단순한 해결책이 정답이다.
+- 가상의 미래 요건을 위한 추상화는 하지 않는다. 현재 필요에만 맞게 구현한다.
+- 불필요한 주석은 달지 않는다. 코드는 스스로 설명해야 하며, 주석은 *무엇*이 아닌 *왜*를 설명한다.
+- 경계에서만 보안을 적용한다. 외부 입력은 검증하되, 내부 로직과 프레임워크 보장은 신뢰한다.
+- 소스 코드에 시크릿, 크리덴셜, API 키를 절대 하드코딩하지 않는다. 항상 환경 변수 또는 `.env` 파일(gitignored)을 사용한다. 로컬 개발 전용이라도 예외 없다 — 하드코딩된 시크릿은 배포 리스크와 나쁜 습관을 만든다.
 
-## Communication
+## 테스트
 
-- Decisions made in Discord are authoritative. Ambiguity must be resolved with Kirin before proceeding.
-- Report blockers immediately. Do not silently work around a blocker.
+- 테스트는 구현과 함께 작성한다. 다음 이터레이션으로 미루지 않는다.
+- 프론트엔드 E2E 테스트는 Playwright(`npx playwright`)를 사용한다. 백엔드 API 테스트는 프로젝트에 맞는 도구를 사용한다.
+- 테스트 시나리오는 구현 시작 전 Hawkeye가 SPEC.md의 Success Criteria로 정의한다.
+- Breda는 모든 테스트를 실행하고 결과를 Roy에게 보내는 완료 보고서에 포함한다.
+- 프로젝트가 커지면 수동 테스트는 자동화 CI로 전환되지만, 초기에 작성된 시나리오는 계속 유효하다.
 
-## Decision-Making
+## 커뮤니케이션
 
-- Kirin makes the final call on all blocking issues and scope changes.
-- Roy coordinates resolution but does not unilaterally decide on blocking matters.
-- Hawkeye's evaluation is independent. Evaluations are based on Kirin's requirements, not Roy's interpretation alone.
+- Discord에서 결정된 사항이 최종이다. 불명확한 것은 진행 전 Kirin에게 확인한다.
+- 블로커가 생기면 즉시 보고한다. 조용히 우회하지 않는다.
+
+## 의사결정
+
+- 모든 블로킹 이슈와 스코프 변경의 최종 결정은 Kirin이 한다.
+- Roy는 해결을 조율하지만 블로킹 사안을 단독으로 결정하지 않는다.
+- Hawkeye의 평가는 독립적이다. 평가는 Roy의 해석만이 아닌 Kirin의 요건을 기준으로 한다.
