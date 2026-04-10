@@ -231,11 +231,11 @@ ADMIN_PORT=8900
 
 ## 미결 이슈 (Open Issues)
 
-- [ ] [Advisory] 허용 쉘 도구 목록의 초기 기본값 — 어드민 설정 전 기본값을 빈 목록으로 할지, 안전한 읽기 전용 셋으로 할지 결정 필요 — v0.1
+- [x] [Advisory] 허용 쉘 도구 목록의 초기 기본값 — **빈 목록으로 결정** (보안 우선, 어드민이 명시적으로 추가해야 활성화) — v0.1, v0.1.1에서 해소
 
 ---
 
 ## 변경 이력 (Changelog)
 
 - v0.1: 초기 스펙 — Discord DM + Claude Code 세션 연동, 로컬 어드민 패널
-- v0.1.1: Success Criteria SC-1~SC-18 추가 (Hawkeye)
+- v0.1.1: Success Criteria SC-1~SC-18 추가 (Hawkeye); 쉘 도구 기본값 빈 목록으로 결정
