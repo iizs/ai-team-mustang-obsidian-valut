@@ -105,21 +105,27 @@ token_usage:
 ```
 GET  /                          # 대시보드
 GET  /pending                   # 팬딩 목록
-POST /approve/{discord_id}      # 승인 → 봇이 DM 발송
+POST /approve/{discord_id}      # 승인 (note 파라미터 포함) → 봇이 DM 발송
 POST /deny/{discord_id}         # 거절 → 봇이 DM 발송
-GET  /sessions                  # 세션 목록 + 토큰 사용량
+GET  /users                     # 승인된 사용자 목록 (username, Discord ID, note, 승인 시간)
+GET  /sessions                  # 세션 목록 + 토큰 사용량 + claude_session_id
 DELETE /sessions/{session_id}   # 세션 강제 종료
 GET  /settings                  # 허용 쉘 도구 목록 설정
 POST /settings                  # 허용 도구 목록 저장
 ```
 
+**DB 추가 컬럼**
+- `users.note TEXT` — 승인 시 어드민이 입력하는 메모 (실명, 소속 등)
+
 **환경 변수 (`.env`)**
 ```
 DISCORD_BOT_TOKEN=...
-ANTHROPIC_API_KEY=...
 SESSION_IDLE_TIMEOUT_HOURS=1
 ADMIN_PORT=8900
+PROJECT_DIR=/absolute/path/to/your/project
+CLAUDE_MODEL=claude-haiku-4-5-20251001
 ```
+(`ANTHROPIC_API_KEY` 불필요 — Claude Code 기존 인증 사용)
 
 ---
 
@@ -239,3 +245,4 @@ ADMIN_PORT=8900
 
 - v0.1: 초기 스펙 — Discord DM + Claude Code 세션 연동, 로컬 어드민 패널
 - v0.1.1: Success Criteria SC-1~SC-18 추가 (Hawkeye); 쉘 도구 기본값 빈 목록으로 결정
+- v0.1.2: 구현 중 반영 사항 — PROJECT_DIR/CLAUDE_MODEL 환경변수 추가; 승인 시 note 필드; /users 페이지; 세션 목록에 claude_session_id 노출; ANTHROPIC_API_KEY 불필요 확인
