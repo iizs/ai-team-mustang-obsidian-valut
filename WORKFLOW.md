@@ -34,8 +34,16 @@ Hawkeye가 Requirements에서 직접 도출한 검증 가능한 체크리스트.
 ```
 Kirin → 요건 전달
   ↓
+Roy ↔ Kirin → 요건 논의 및 확인
+  ↓
 Roy → SPEC.md 생성/업데이트 (Requirements + Technical Design)
      → 시작 전 Open Issues 검토 및 처리 (수락 / 보류 / 거절)
+  ↓
+Roy ↔ Breda → SPEC 구현 측면 상호 검토
+              → Breda: 기술적 우려, 모호한 부분, 구현 리스크 제기
+              → Roy: 검토 의견 반영해 SPEC 조정
+              → 의사결정이 필요한 사항은 Kirin에게 에스컬레이션
+              → 합의된 내용으로 SPEC.md 최종화
   ↓
 Hawkeye → SPEC.md에 Success Criteria 추가
   ↓
