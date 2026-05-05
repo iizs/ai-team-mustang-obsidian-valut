@@ -1,5 +1,8 @@
 ## Requirements
 
+> 원칙 문서: https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
+> 방향성이 모호한 경우 이 문서를 따른다.
+
 Karpathy의 llm-wiki 컨셉을 팀 협업 도구로 확장한 오픈소스 솔루션.
 사람이 원본 자료를 투입하면 LLM이 위키를 생성·관리하며, 팀 에이전트가 로컬에서 연결해 사용할 수 있다.
 
@@ -45,7 +48,7 @@ Karpathy의 llm-wiki 컨셉을 팀 협업 도구로 확장한 오픈소스 솔�
 | Backend | Python (FastAPI) |
 | Frontend | Next.js + shadcn/ui |
 | 위키 저장소 | Git (bare repo, Obsidian MD 포맷) |
-| 원본 저장소 | Git (별도 repo 또는 동일 repo 내 `_sources/`) |
+| 원본 저장소 | 위키 저장소와 동일 Git repo 내 `_sources/` 하위 |
 | LLM | LiteLLM (Anthropic API / Ollama 등 교체 가능) |
 | 사용자/계정 DB | SQLite (self-hosted 기본), 추후 Postgres 지원 |
 | 인증 | 이메일+패스워드 (JWT), v0.2+ SSO |
@@ -76,7 +79,7 @@ Karpathy의 llm-wiki 컨셉을 팀 협업 도구로 확장한 오픈소스 솔�
 
 #### 3. Wiki Store
 - Git 기반 Obsidian MD 포맷
-- 페이지 간 `[[백링크]]` 사용
+- 페이지 간 내부 링크는 Obsidian `[[페이지명]]` 형식 사용
 - YAML frontmatter: `type`, `created`, `last_updated`, `tags`, `sources` (원본 파일 참조)
 
 #### 4. Wiki UI
