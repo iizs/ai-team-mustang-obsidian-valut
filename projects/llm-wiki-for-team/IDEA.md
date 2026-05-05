@@ -1,5 +1,7 @@
 # llm-wiki-for-team
 
+**서비스 이름: Sheska** (Sheska: llm-wiki for team)
+
 팀을 위한 LLM 위키 — AI 에이전트가 참조할 수 있는 팀/서비스 지식 베이스 설계 및 구축.
 일종의 솔루션/제품 개념으로 접근.
 
