@@ -1,5 +1,6 @@
 ## Requirements
 
+> 서비스명: **Sheska** — llm-wiki for team
 > 원칙 문서: https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
 > 방향성이 모호한 경우 이 문서를 따른다.
 
