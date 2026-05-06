@@ -56,28 +56,93 @@ Karpathy의 llm-wiki 컨셉을 팀 협업 도구로 확장한 오픈소스 솔�
 
 ### 주요 컴포넌트
 
-#### 1. Source Ingest
+#### 1. Job Queue (비동기 처리)
+
+모든 LLM 처리 작업은 즉시 실행이 아닌 Job으로 등록되어 백그라운드 워커가 순차 처리한다.
+
+**Job 종류:**
+| Type | 트리거 |
+|------|--------|
+| `INGEST` | 원본 파일 업로드 (신규/교체 구분 없음) |
+| `EDIT` | 사용자 위키 수정 요청 |
+
+> 원칙: "LLM은 축적하지, 삭제 판단은 Lint에서" — 원본 교체 시도 단순 INGEST와 동일하게 처리. 기존 위키 내용을 삭제하지 않고 새 원본 내용을 반영·보강한다.
+
+**Job 상태:** `Pending → Processing → Done | Failed`
+
+**데이터 모델 (SQLite `jobs` 테이블):**
+```
+job_id | type | payload | status | created_by | created_at | updated_at | error_msg
+```
+- `payload`: INGEST — `{source_path}`, EDIT — `{edit_text}`
+
+**동작 규칙:**
+- 사용자는 업로드/요청 후 즉시 "큐 등록됨" 응답 받음
+- UI에서 Job 목록/상태 조회 가능 (Admin: 전체, Member: 본인 요청만)
+- 실패 시 `error_msg` 저장, Admin 재시도 가능
+- MVP: 워커 1개 (순차 FIFO)
+
+**Known Limitation (v0.1):**
+원본 교체 시 원본에서 제거된 내용이 위키에 잔존할 수 있다. Lint(v0.2+) 도입 전까지 사용자가 직접 Edit 요청으로 수동 정리해야 한다.
+
+#### 2. Source Ingest
 - 파일 업로드: PDF, TXT, MD 허용 (확장자 화이트리스트 검증)
 - 원본은 Source Store(볼륨/로컬 경로)에 보존
-- soft-delete: `_trash/` 하위 이동
-- 원본 교체: 기존 파일 replace → LLM re-ingest 트리거
+- 원본 삭제: v0.2+ (MVP 제외)
 
-#### 2. LLM Pipeline
+#### 3. LLM Pipeline
 
 **Ingest flow:**
 1. 원본 파싱 (파일 → 텍스트)
-2. LLM에 위키 작성/업데이트 요청
+2. LLM에 위키 작성/업데이트 요청 (축적 방식, 삭제 없음)
 3. 결과를 Obsidian MD 형식으로 Wiki Store에 커밋
+4. `index.md` 갱신 (LLM)
+5. `log.md` 항목 append (시스템)
 
 **Edit flow:**
 1. 사용자가 UI에서 수정 요청 텍스트 입력
 2. LLM에 페이지 목록 + frontmatter 전달 → 대상 페이지 선택 (1단계)
 3. LLM이 선택된 페이지를 수정 후 커밋 (2단계)
+4. `index.md` 갱신 (LLM)
+5. `log.md` 항목 append (시스템)
 
-#### 3. Wiki Store
+#### 4. Wiki Store
 - Normal Git repo (working tree 있음), gitpython으로 read/write/commit
 - Obsidian MD 포맷: 페이지 간 내부 링크는 `[[페이지명]]` 형식
 - YAML frontmatter: `type`, `created`, `last_updated`, `tags`, `sources`
+
+**예약 파일 (repo root):**
+
+`index.md` — 위키 전체 지도. LLM이 모든 Ingest/Edit 완료 후 자동 갱신.
+```markdown
+# Wiki Index
+*Last updated: YYYY-MM-DD HH:MM:SS*
+
+| 페이지 | 타입 | 한줄 요약 | 최종 수정 |
+|--------|------|-----------|-----------|
+| [[페이지명]] | concept | ... | YYYY-MM-DD |
+```
+- 에이전트가 위키 구조 파악 시 첫 번째로 읽는 파일
+
+`log.md` — 모든 Job 이력. append-only (최신 항목이 상단). 시스템이 자동 기록.
+```markdown
+# Sheska Operation Log
+
+## 2026-05-06T19:00:00Z | INGEST | SUCCESS
+- source: product_spec_v2.pdf
+- created: [[제품개요]], [[기능정책]]
+- updated: [[용어집]]
+
+## 2026-05-06T18:30:00Z | EDIT | SUCCESS
+- request: "기능정책에서 결제 관련 항목을 분리해줘"
+- modified: [[기능정책]], [[결제정책]]
+
+## 2026-05-06T18:00:00Z | INGEST | FAILED
+- source: old_spec.pdf
+- error: LLM context limit exceeded
+```
+
+`_sheska.yaml` — Sheska 서버 설정. 원본 접근 base URL 보관.
 
 #### 4. Source 참조 설계
 
@@ -141,9 +206,10 @@ sources:
 ### MVP 범위 (v0.1)
 
 1. 사용자 관리 / 인증 (로그인, 계정 관리, role 지정)
-2. 원본 투입 UI (PDF, TXT, MD 파일 업로드; 확장자 검증)
-3. LLM 위키 생성/업데이트 (Ingest flow)
-4. LLM 수정 요청 처리 (Edit flow, 2단계)
+2. 비동기 Job Queue (INGEST / EDIT, 상태 조회 UI 포함)
+3. 원본 투입 UI (PDF, TXT, MD 파일 업로드; 확장자 검증)
+4. LLM 위키 생성/업데이트 (Ingest flow, index.md + log.md 자동 관리)
+5. LLM 수정 요청 처리 (Edit flow, 2단계, index.md + log.md 자동 관리)
 5. 위키 조회 UI
 6. 원본 조회 UI
 7. 로컬 sync (git + zip, `_sheska.yaml` 포함)
@@ -151,9 +217,11 @@ sources:
 
 ### 보류 (v0.2+)
 
+- 원본 삭제 (soft-delete)
 - URL 소화 (크롤링)
 - DOCX 지원
-- Lint (위키 health-check)
+- Lint (위키 health-check, 스테일 페이지 정리)
+- Job 병렬 처리 (워커 N개)
 - SSO
 - 멀티 테넌시
 - 원본 출처 추적 가시화 (source graph)
@@ -341,3 +409,4 @@ sources:
 - v0.1: 초기 SPEC (Requirements + Technical Design)
 - v0.2: Breda 기술 검토 반영 — 저장 구조, Edit flow, Source 참조 설계, MVP 범위 조정
 - v0.3: Hawkeye SC-1~SC-30 추가 (Blocking 22개 / Advisory 8개)
+- v0.4: Job Queue, index.md/log.md, Known Limitation 추가; 삭제 v0.2+로 보류
