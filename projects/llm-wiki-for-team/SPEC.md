@@ -106,7 +106,38 @@ job_id | type | payload | status | created_by | created_at | updated_at | error_
 4. `index.md` 갱신 (LLM)
 5. `log.md` 항목 append — `job_id` + 수정된 페이지만 기록 (요청 전문은 jobs 테이블에만 보관)
 
-#### 4. Wiki Store
+#### 4. LLM 설정
+
+**연결 설정 (`.env`):**
+```env
+LITELLM_PROVIDER=anthropic       # anthropic | ollama | openai 등
+LITELLM_MODEL=claude-opus-4-7    # 사용할 모델명
+LITELLM_API_KEY=sk-ant-...       # API 키 (Ollama는 생략)
+LITELLM_BASE_URL=                # Ollama 등 로컬 엔드포인트 (선택)
+```
+- MVP: `.env` 파일로만 관리. Admin UI 설정 패널은 v0.2+.
+- 서비스 기동 시 설정값 로드. 변경 시 재기동 필요.
+
+**프롬프트 관리:**
+- 위치: `prompts/ingest.txt`, `prompts/edit.txt` (repo에 기본 템플릿 포함)
+- MVP: 파일 직접 수정. UI 편집기는 v0.2+.
+- 기동 시 파일 로드, 변경 시 재기동.
+
+**프롬프트 필수 제약 조건:**
+
+Ingest 프롬프트에 반드시 포함해야 할 내용:
+- 출력 형식: Obsidian MD (`[[페이지명]]` 내부 링크, YAML frontmatter)
+- frontmatter 필수 필드: `type`, `created`, `last_updated`, `tags`, `sources`
+- 축적 원칙: 기존 위키 내용을 삭제하지 말고 새 내용으로 보강
+- 출력 단위: 페이지별 파일 단위로 응답
+
+Edit 프롬프트에 반드시 포함해야 할 내용:
+- 대상 페이지 1개만 수정
+- frontmatter 구조 유지 (`created` 변경 금지, `last_updated` 갱신)
+- `[[링크]]` 형식 준수
+- 지시받지 않은 내용 삭제 금지
+
+#### 5. Wiki Store
 - Normal Git repo (working tree 있음), gitpython으로 read/write/commit
 - Obsidian MD 포맷: 페이지 간 내부 링크는 `[[페이지명]]` 형식
 - YAML frontmatter: `type`, `created`, `last_updated`, `tags`, `sources`
@@ -146,7 +177,7 @@ job_id | type | payload | status | created_by | created_at | updated_at | error_
 
 `_sheska.yaml` — Sheska 서버 설정. 원본 접근 base URL 보관.
 
-#### 4. Source 참조 설계
+#### 6. Source 참조 설계
 
 위키 페이지의 `sources` frontmatter는 원본 파일에 대한 접근 경로를 포함한다.
 원본은 git에 없으므로 위키를 로컬에 받아간 쪽도 원본에 접근할 수 있어야 한다.
@@ -174,14 +205,14 @@ sources:
 - `GET /api/sources/{filename}` — 원본 파일 서빙 (Auth 필요)
 - `GET /api/sources/` — 원본 목록
 
-#### 5. Wiki UI
+#### 7. Wiki UI
 - 위키 페이지 조회 (읽기 전용)
 - **수정 요청 입력창**: 각 위키 페이지 하단에 고정. 해당 페이지 단일 컨텍스트로 수정 요청 제출. 여러 페이지에 걸친 요청은 MVP 범위 외.
 - **Jobs 탭**: Job 목록 및 처리 상태 조회 (Admin: 전체 / Member: 본인 요청만). 요청 전문, 상태, 에러 메시지 포함.
 - 관리자: 원본 투입, 원본 목록/조회/삭제 메뉴
 - Member: 원본 조회 가능 (읽기 전용)
 
-#### 6. Local Sync
+#### 8. Local Sync
 - **git**: `git clone <wiki-repo-url>` / `git pull`
 - **zip**: UI에서 현재 위키 스냅샷 다운로드 (`_sheska.yaml` 포함)
 - **가이드 문서**: 에이전트 연동 방법 + 기본 프롬프트 예시 + `source_base_url` 설정 방법
@@ -432,3 +463,4 @@ sources:
 - v0.3: Hawkeye SC-1~SC-30 추가 (Blocking 22개 / Advisory 8개)
 - v0.4: Job Queue, index.md/log.md, Known Limitation 추가; 삭제 v0.2+로 보류
 - v0.5: Edit flow 확정 — 단일 페이지 컨텍스트 입력창, Jobs 탭 분리, log.md 기록 범위 한정 (job_id + 결과만, 요청 전문 제외)
+- v0.6: LLM 설정 섹션 추가 (연결 설정, 프롬프트 관리, 프롬프트 필수 제약 조건)
