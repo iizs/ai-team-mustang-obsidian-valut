@@ -52,7 +52,8 @@ Karpathy의 llm-wiki 컨셉을 팀 협업 도구로 확장한 오픈소스 솔�
 | LLM | LiteLLM (Anthropic API / Ollama 등 교체 가능) |
 | 사용자/계정 DB | SQLite (self-hosted 기본), 추후 Postgres 지원 |
 | 인증 | 이메일+패스워드 (JWT), v0.2+ SSO |
-| 배포 | Docker Compose (backend + frontend + git server) |
+| 배포 | Docker Compose (backend + frontend + nginx git server) |
+| git 서버 | nginx + `git http-backend` (별도 컨테이너) |
 
 ### 주요 컴포넌트
 
@@ -74,16 +75,17 @@ Karpathy의 llm-wiki 컨셉을 팀 협업 도구로 확장한 오픈소스 솔�
 ```
 job_id | type | payload | status | created_by | created_at | updated_at | error_msg
 ```
-- `payload`: INGEST — `{source_path}`, EDIT — `{edit_text}`
+- `payload`: INGEST — `{source_path}`, EDIT — `{edit_text, page_path}`
 
 **동작 규칙:**
 - 사용자는 업로드/요청 후 즉시 "큐 등록됨" 응답 받음
 - **Jobs 탭 (별도 UI)**: Job 목록 및 처리 상태(Pending/Processing/Done/Failed) 조회. Admin: 전체, Member: 본인 요청만
 - 실패 시 `error_msg` 저장, Admin 재시도 가능
-- MVP: 워커 1개 (순차 FIFO)
+- MVP: 워커 1개 (순차 FIFO). 구현: FastAPI `BackgroundTasks` — 외부 의존성(Celery/Redis) 없이 단일 프로세스로 처리.
 
 **Known Limitation (v0.1):**
-원본 교체 시 원본에서 제거된 내용이 위키에 잔존할 수 있다. Lint(v0.2+) 도입 전까지 사용자가 직접 Edit 요청으로 수동 정리해야 한다.
+- 원본 교체 시 원본에서 제거된 내용이 위키에 잔존할 수 있다. Lint(v0.2+) 도입 전까지 사용자가 직접 Edit 요청으로 수동 정리해야 한다.
+- 위키 규모 증가 시 `index.md` 갱신에 LLM 비용이 매 Job마다 발생한다. v0.2에서 incremental 갱신 검토 예정.
 
 #### 2. Source Ingest
 - 파일 업로드: PDF, TXT, MD 허용 (확장자 화이트리스트 검증)
@@ -243,11 +245,11 @@ sources:
 2. 비동기 Job Queue (INGEST / EDIT, 상태 조회 UI 포함)
 3. 원본 투입 UI (PDF, TXT, MD 파일 업로드; 확장자 검증)
 4. LLM 위키 생성/업데이트 (Ingest flow, index.md + log.md 자동 관리)
-5. LLM 수정 요청 처리 (Edit flow, 2단계, index.md + log.md 자동 관리)
-5. 위키 조회 UI
-6. 원본 조회 UI
-7. 로컬 sync (git + zip, `_sheska.yaml` 포함)
-8. 로컬 연동 가이드 문서
+5. LLM 수정 요청 처리 (Edit flow, index.md + log.md 자동 관리)
+6. 위키 조회 UI
+7. 원본 조회 UI
+8. 로컬 sync (git + zip, `_sheska.yaml` 포함)
+9. 로컬 연동 가이드 문서
 
 ### 보류 (v0.2+)
 
@@ -306,10 +308,11 @@ sources:
 - When: 동일 파일명으로 재업로드
 - Then: 기존 파일 replace, re-ingest 자동 트리거
 
-**SC-9** [Blocking] 원본 soft-delete
+**SC-9** [Advisory / v0.2+] 원본 soft-delete
 - Given: Admin 계정, 기존 원본 파일
 - When: 삭제 요청
 - Then: `_trash/` 하위로 이동, 원본 활성 목록에서 제거
+- Note: MVP 제외, v0.2에서 구현
 
 **SC-10** [Blocking] Member 원본 투입 차단
 - Given: Member 계정
@@ -318,9 +321,14 @@ sources:
 
 ### LLM Ingest
 
-**SC-11** [Blocking] 원본 업로드 후 위키 페이지 생성
-- Given: PDF/TXT/MD 파일이 Source Store에 저장됨
-- When: Ingest flow 실행
+**SC-11** [Blocking] 원본 업로드 후 Job 등록 응답
+- Given: Admin 계정, PDF/TXT/MD 파일
+- When: 원본 파일 업로드
+- Then: Source Store에 저장 성공 후 INGEST Job 큐 등록, 사용자에게 "큐 등록됨" 응답 즉시 반환
+
+**SC-11-b** [Blocking] Ingest 완료 후 위키 페이지 생성 및 commit
+- Given: INGEST Job 처리
+- When: Ingest flow 완료
 - Then: LLM이 Obsidian MD 위키 페이지를 생성하여 Wiki Store에 git commit
 
 **SC-12** [Blocking] 위키 페이지 frontmatter 준수
@@ -354,6 +362,16 @@ sources:
 - Given: Edit flow 완료
 - When: Wiki Store git log 확인
 - Then: 변경된 페이지가 새 commit으로 기록됨
+
+**SC-16-b** [Blocking] index.md Ingest/Edit 후 자동 갱신
+- Given: INGEST 또는 EDIT Job 완료
+- When: Wiki Store index.md 확인
+- Then: 갱신된 `Last updated` 타임스탬프와 변경된 페이지 목록이 반영됨
+
+**SC-16-c** [Blocking] log.md append 및 형식 준수
+- Given: Job 완료 (INGEST 또는 EDIT, 성공/실패 모두)
+- When: log.md 확인
+- Then: 최신 항목이 상단에 추가되며 `job_id` + 결과(페이지 목록 또는 error)만 포함; 요청 전문(edit_text)은 기록되지 않음
 
 ### Jobs 탭
 
@@ -464,3 +482,4 @@ sources:
 - v0.4: Job Queue, index.md/log.md, Known Limitation 추가; 삭제 v0.2+로 보류
 - v0.5: Edit flow 확정 — 단일 페이지 컨텍스트 입력창, Jobs 탭 분리, log.md 기록 범위 한정 (job_id + 결과만, 요청 전문 제외)
 - v0.6: LLM 설정 섹션 추가 (연결 설정, 프롬프트 관리, 프롬프트 필수 제약 조건)
+- v0.7: Breda/Hawkeye 2차 리뷰 반영 — EDIT payload에 page_path 추가, git server nginx 확정, FastAPI BackgroundTasks 명시, Known Limitation 보강, SC-9 Advisory/v0.2+ 변경, SC-11 분리, SC-16-b/c 추가
