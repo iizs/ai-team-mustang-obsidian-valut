@@ -423,6 +423,7 @@ sources:
 - [x] [Advisory] 원본 파일 저장 — git 비추적, Docker Volume / Local Path 분리
 - [x] [Advisory] MVP 파일 형식 — PDF, TXT, MD만 지원 (DOCX, URL 제외)
 - [x] [Advisory] Lint — v0.2+로 보류
+- [ ] [Advisory] 권한 관리 세분화 — MVP는 Admin/Member 2-role 직접 구현. v0.2+ 권한 원자화 시 Casbin 확장 가능성을 염두에 둔 설계.
 
 ## Changelog
 
