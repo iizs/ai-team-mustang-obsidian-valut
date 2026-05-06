@@ -78,7 +78,7 @@ job_id | type | payload | status | created_by | created_at | updated_at | error_
 
 **동작 규칙:**
 - 사용자는 업로드/요청 후 즉시 "큐 등록됨" 응답 받음
-- UI에서 Job 목록/상태 조회 가능 (Admin: 전체, Member: 본인 요청만)
+- **Jobs 탭 (별도 UI)**: Job 목록 및 처리 상태(Pending/Processing/Done/Failed) 조회. Admin: 전체, Member: 본인 요청만
 - 실패 시 `error_msg` 저장, Admin 재시도 가능
 - MVP: 워커 1개 (순차 FIFO)
 
@@ -100,11 +100,11 @@ job_id | type | payload | status | created_by | created_at | updated_at | error_
 5. `log.md` 항목 append (시스템)
 
 **Edit flow:**
-1. 사용자가 UI에서 수정 요청 텍스트 입력
-2. LLM에 페이지 목록 + frontmatter 전달 → 대상 페이지 선택 (1단계)
-3. LLM이 선택된 페이지를 수정 후 커밋 (2단계)
+1. 사용자가 특정 위키 페이지 조회 화면 하단 입력창에 수정 요청 텍스트 입력 (단일 페이지 컨텍스트)
+2. 해당 페이지를 대상으로 LLM에 수정 요청 전달 (페이지 선택 단계 생략)
+3. LLM이 해당 페이지를 수정 후 커밋
 4. `index.md` 갱신 (LLM)
-5. `log.md` 항목 append (시스템)
+5. `log.md` 항목 append — `job_id` + 수정된 페이지만 기록 (요청 전문은 jobs 테이블에만 보관)
 
 #### 4. Wiki Store
 - Normal Git repo (working tree 있음), gitpython으로 read/write/commit
@@ -125,19 +125,21 @@ job_id | type | payload | status | created_by | created_at | updated_at | error_
 - 에이전트가 위키 구조 파악 시 첫 번째로 읽는 파일
 
 `log.md` — 모든 Job 이력. append-only (최신 항목이 상단). 시스템이 자동 기록.
+- **기록 범위**: `job_id` + 결과(생성/수정된 페이지 목록)만 포함. 요청 전문은 기록하지 않음 (jobs 테이블에만 보관).
+- git에 포함되어 clone 시 전체 공개됨 — 민감한 요청 내용 노출 방지 목적.
 ```markdown
 # Sheska Operation Log
 
-## 2026-05-06T19:00:00Z | INGEST | SUCCESS
+## 2026-05-06T19:00:00Z | INGEST | SUCCESS | job_id: abc123
 - source: product_spec_v2.pdf
 - created: [[제품개요]], [[기능정책]]
 - updated: [[용어집]]
 
-## 2026-05-06T18:30:00Z | EDIT | SUCCESS
-- request: "기능정책에서 결제 관련 항목을 분리해줘"
-- modified: [[기능정책]], [[결제정책]]
+## 2026-05-06T18:30:00Z | EDIT | SUCCESS | job_id: def456
+- page: [[기능정책]]
+- modified: [[기능정책]]
 
-## 2026-05-06T18:00:00Z | INGEST | FAILED
+## 2026-05-06T18:00:00Z | INGEST | FAILED | job_id: ghi789
 - source: old_spec.pdf
 - error: LLM context limit exceeded
 ```
@@ -174,7 +176,8 @@ sources:
 
 #### 5. Wiki UI
 - 위키 페이지 조회 (읽기 전용)
-- 수정 요청 입력창
+- **수정 요청 입력창**: 각 위키 페이지 하단에 고정. 해당 페이지 단일 컨텍스트로 수정 요청 제출. 여러 페이지에 걸친 요청은 MVP 범위 외.
+- **Jobs 탭**: Job 목록 및 처리 상태 조회 (Admin: 전체 / Member: 본인 요청만). 요청 전문, 상태, 에러 메시지 포함.
 - 관리자: 원본 투입, 원본 목록/조회/삭제 메뉴
 - Member: 원본 조회 가능 (읽기 전용)
 
@@ -306,20 +309,37 @@ sources:
 
 ### LLM Edit
 
-**SC-15** [Blocking] 수정 요청 2단계 처리
-- Given: Member/Admin이 수정 요청 텍스트 입력
-- When: Edit flow 실행
-- Then: LLM이 1단계(페이지 목록+frontmatter 기반 대상 선택) → 2단계(선택 페이지 수정+commit) 순으로 처리
+**SC-15** [Blocking] 수정 요청 입력 위치
+- Given: Member/Admin이 특정 위키 페이지 조회 중
+- When: 페이지 하단 입력창에 수정 요청 텍스트 입력 후 제출
+- Then: 해당 페이지를 컨텍스트로 EDIT Job 생성, "큐 등록됨" 응답 반환
 
-**SC-16** [Blocking] 수정 결과 git commit
+**SC-16** [Blocking] 단일 페이지 Edit 처리
+- Given: EDIT Job 생성 (특정 페이지 컨텍스트)
+- When: Edit flow 실행
+- Then: LLM이 해당 페이지만 수정 후 git commit. 다른 페이지는 변경되지 않음.
+
+**SC-17** [Blocking] 수정 결과 git commit
 - Given: Edit flow 완료
 - When: Wiki Store git log 확인
 - Then: 변경된 페이지가 새 commit으로 기록됨
 
-**SC-17** [Advisory] 수정 결과 UI 피드백
+### Jobs 탭
+
+**SC-17-a** [Blocking] Jobs 탭 — Member 본인 요청 조회
+- Given: Member 로그인, Edit 또는 Ingest Job 제출 후
+- When: Jobs 탭 접근
+- Then: 본인이 제출한 Job 목록 및 처리 상태(Pending/Processing/Done/Failed) 조회 가능, 요청 전문 확인 가능
+
+**SC-17-b** [Blocking] Jobs 탭 — Admin 전체 조회
+- Given: Admin 로그인
+- When: Jobs 탭 접근
+- Then: 전체 사용자의 Job 목록 및 상태 조회 가능
+
+**SC-17-c** [Advisory] Jobs 탭 — 수정 결과 페이지 표시
 - Given: Edit flow 완료
-- When: UI 확인
-- Then: 어떤 페이지가 수정되었는지 사용자에게 명시적으로 표시
+- When: Jobs 탭에서 해당 Job 확인
+- Then: 수정된 페이지 목록이 명시적으로 표시됨
 
 ### 위키 조회 UI
 
@@ -410,3 +430,4 @@ sources:
 - v0.2: Breda 기술 검토 반영 — 저장 구조, Edit flow, Source 참조 설계, MVP 범위 조정
 - v0.3: Hawkeye SC-1~SC-30 추가 (Blocking 22개 / Advisory 8개)
 - v0.4: Job Queue, index.md/log.md, Known Limitation 추가; 삭제 v0.2+로 보류
+- v0.5: Edit flow 확정 — 단일 페이지 컨텍스트 입력창, Jobs 탭 분리, log.md 기록 범위 한정 (job_id + 결과만, 요청 전문 제외)
