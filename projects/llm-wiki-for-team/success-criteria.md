@@ -207,22 +207,36 @@
 ## 자가 가입 / 사용자 관리 (v0.2 신규)
 
 **SC-31** [Blocking] 자가 가입 (signup)
-- Given: 비로그인 상태
+- Given: 비로그인 상태, `SIGNUP_ENABLED=true`
 - When: `/signup`에서 이메일/패스워드 입력 후 등록
-- Then: 즉시 활성 계정으로 생성, 기본 `member` role 부여, 로그인 화면으로 이동
-- Note: 이메일 인증 없음 (SMTP 미설정). 향후 v0.3+에서 이메일 인증 검토.
+- Then:
+  - 이메일 형식 검증 통과 (e.g., `not-an-email` 거부) 및 중복이 아닐 것 (중복 시 409)
+  - 패스워드 최소 8자 이상 (미달 시 422)
+  - 즉시 활성(`is_active=true`) 계정으로 생성, 기본 `member` role 부여
+  - 가입 직후 **자동 로그인**(JWT 발급) 후 wiki 메인으로 이동
+- Note: 이메일 인증 없음 (SMTP 미설정). Rate limit / CAPTCHA는 v0.3+ 보안 이터레이션에서 일괄 처리.
 
-**SC-32** [Blocking] Admin 권한 부여 메뉴
+**SC-32** [Blocking] Admin 사용자 관리 메뉴 (목록 / role / 비활성화)
 - Given: Admin 계정으로 로그인
-- When: 사용자 관리 화면 접근
-- Then: 사용자 목록 조회 가능 + role 변경(Member ↔ Admin) + 비활성화 가능
+- When: `/admin/users` 화면 접근
+- Then:
+  - 사용자 목록 조회 (이메일, role, `is_active`, 가입일)
+  - 다른 사용자의 role 변경 (Member ↔ Admin) 가능
+  - 다른 사용자의 `is_active` 토글 가능 (비활성 ↔ 재활성)
+  - **자기 자신은 role 변경/비활성화 불가** (UI에서 비활성, API에서도 거부)
+- Note: SC-3(Admin 직접 사용자 생성)은 별개로 유지됨 — 자가 가입과 별도로 Admin이 직접 생성하는 시나리오 보존.
 
 ## 위키 페이지 레이아웃 (v0.2 신규)
 
 **SC-33** [Blocking] frontmatter는 페이지 속성 영역으로 분리
 - Given: 위키 페이지 조회 중
 - When: 페이지 렌더링 확인
-- Then: frontmatter 내용은 본문과 분리된 "페이지 속성" 영역에 표 형식으로 표시. 기본 접힌 상태이며 사용자가 펼칠 수 있음.
+- Then:
+  - frontmatter 내용은 본문과 분리된 "Page Properties" 영역에 표(2-column key/value) 형식으로 표시
+  - **라벨은 영문 키 그대로** (`type`, `created`, `last_updated`, `tags`, `sources` 등; v0.2 기준 i18n 미적용)
+  - list 값(`tags`, `sources` 등)은 **콤마 구분** 단일 셀 (빈 list는 `—`)
+  - 알 수 없는 frontmatter 키도 동일한 표 행으로 표시 (관용적)
+  - 기본 접힌 상태이며 사용자가 펼칠 수 있음. 펼침/접힘 상태는 localStorage에 저장되어 다음 방문 시 유지
 
 **SC-34** [Blocking] 위키 페이지 노출 순서
 - Given: 위키 페이지 조회 중
@@ -230,13 +244,48 @@
 - Then: 위에서 아래로 본문 → 페이지 속성(접힘) → 수정 요청 입력창 순서로 노출됨
 
 **SC-35** [Blocking] 페이지 속성 sources 링크
-- Given: 페이지 속성 영역에 `sources` 항목이 있는 위키 페이지
+- Given: 페이지 속성 영역에 `sources` 항목이 있는 위키 페이지 (Web UI 컨텍스트)
 - When: `sources`의 항목 클릭
-- Then: 해당 원본 파일을 다운로드 (별도 미리보기 페이지 없음)
+- Then:
+  - Frontend가 `GET /api/sources/{filename}`을 **JWT 헤더와 함께 fetch**, 응답을 Blob으로 받아 다운로드 트리거 (단순 `<a href>` 링크 미사용 — SC-23 인증 충돌 방지)
+  - 별도 미리보기 페이지 없음
+  - 원본 파일 부재 시 사용자에게 오류 메시지 표시
 
 ## Jobs 탭 (v0.2 신규)
 
 **SC-36** [Blocking] Jobs 탭 페이징
 - Given: Jobs 탭 접근 (Admin 또는 Member)
 - When: Job 개수가 페이지 크기를 초과
-- Then: 페이지 크기 default 20건, 페이지 네비게이션 노출. 클라이언트에서 페이지 크기 변경 가능
+- Then:
+  - 백엔드: `GET /api/jobs/?page=1&size=20` 쿼리 파라미터 지원, 응답은 `{items, total, page, size}`
+  - 정렬: `created_at desc` 고정 (최신 우선)
+  - 클라이언트 default 페이지 크기 20, 옵션 20 / 50 / 100 (selector)
+  - 네비게이션: Prev / Next 버튼 + "Page N of M" 표시
+  - 결과 0건 시 "No jobs" 안내 메시지 노출
+
+## v0.2 신규 SC (보안·안전장치)
+
+**SC-37** [Blocking] 마지막 Admin 보호
+- Given: 시스템에 활성(`is_active=true`) Admin이 1명만 있는 상태
+- When: 그 Admin을 Member로 강등 시도 또는 비활성화 시도 (UI 또는 API 직접 호출)
+- Then: 거부 + 명시적 오류 메시지 ("Cannot demote/deactivate the last active admin"). 시스템에 Admin이 0명이 되는 상태는 항상 차단됨.
+
+**SC-38** [Blocking] 비활성화 사용자 JWT 즉시 무효
+- Given: 사용자가 Admin에 의해 비활성화됨(`is_active=false`)
+- When: 해당 사용자가 만료 전 JWT로 보호된 API 호출
+- Then: 인증 미들웨어가 `is_active` 체크 후 401 반환 (JWT TTL 만료를 기다리지 않음). 로그인 시도도 401.
+
+**SC-39** [Blocking] 존재하지 않는 wikilink 동작
+- Given: 위키 페이지 본문에 `[[NonExistentPage]]` 링크가 있음
+- When: 사용자가 해당 링크 클릭
+- Then: "This page does not yet exist" 안내 페이지로 이동 (404 페이지 구분 가능). v0.1 Karpathy 원칙 — 사용자 직접 생성 불가, LLM 경유로만 생성. 안내 페이지는 빈 페이지 생성을 유도하지 않고 정보만 제공.
+
+**SC-40** [Blocking] `SIGNUP_ENABLED` 환경변수
+- Given: 백엔드 환경변수 `SIGNUP_ENABLED=false`
+- When:
+  - (a) 비로그인 상태에서 `/signup` 페이지 접근
+  - (b) `POST /api/auth/signup` 직접 호출
+- Then:
+  - (a) `/signup` 페이지가 표시되지 않거나 "Signup is disabled" 안내로 대체
+  - (b) API는 403 Forbidden 반환
+- Default: `SIGNUP_ENABLED=true` (자가 가입 허용)
