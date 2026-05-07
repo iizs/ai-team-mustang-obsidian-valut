@@ -8,36 +8,42 @@
 
 ## 사용자 경험
 
-### B-1. Web UI `[[wikilink]]` 클릭 이동 (SC-20 완성)
+### B-1. Web UI `[[wikilink]]` 클릭 이동 (SC-20 완성) — **v0.2 진행 중**
 
-- **현 상태**: SPEC §SC-20 [Advisory] — Obsidian에서는 동작하지만 Web UI에서 `[[페이지명]]`은 plain text로 보임
+- **상태**: [v0.2 iteration](iterations/v0.2.md)에서 진행. SC-20을 Blocking으로 승격.
+- **현 상태**: SPEC §SC-20 — Obsidian에서는 동작하지만 Web UI에서 `[[페이지명]]`은 plain text로 보임
 - **필요 작업**:
   - Markdown 렌더러(`ReactMarkdown`)에 커스텀 plugin 추가
   - `[[페이지명]]` → `<a href="/wiki/페이지명">페이지명</a>` 변환
   - 내부 페이지 존재 여부 확인 → 없는 링크는 visual cue (회색 등)
 - **관련 파일**: `frontend/src/app/wiki/[...slug]/page.tsx`
 
-### B-2. 신규 계정 생성 UI
+### B-2. 신규 계정 생성 UI — **v0.2 진행 중**
 
-- **현 상태**:
-  - 첫 Admin은 `backend/scripts/seed_admin.py` CLI로 생성
-  - 이후 사용자는 `POST /api/users/` (Admin 전용 API)로만 생성 가능
-  - UI에서 직접 사용자 관리 화면이 없음
+- **상태**: [v0.2 iteration](iterations/v0.2.md)에서 진행.
+- **방향 (v0.2 킥오프 결정)**: Admin이 일일이 생성하는 대신 사용자가 자가 가입 (`/signup`). Admin은 사용자 목록에서 권한 조정만.
+- **이메일 인증**: SMTP 미설정으로 v0.2 범위 외. 즉시 활성으로 시작.
 - **필요 작업**:
-  - `/users` 또는 `/admin/users` 페이지 신설 (Admin only)
-    - 사용자 목록 조회
-    - 신규 사용자 생성 폼 (email, password, role)
-    - 역할 변경 (Member ↔ Admin)
-    - 비활성화
+  - `/signup` 페이지 + 백엔드 엔드포인트 (SC-31)
+  - Admin 사용자 관리 화면: 목록 + role 변경(Member ↔ Admin) + 비활성화 (SC-32)
+- **이월된 미세 항목 (v0.3+)**:
   - 첫 Admin 부트스트랩: `seed_admin.py` 유지하되, 환경변수 `INITIAL_ADMIN_EMAIL/PASSWORD` 자동 시딩 옵션 검토
+  - 이메일 인증 (SMTP 도입 후)
 
-### B-3. UI 정돈
+### B-3. UI 정돈 — **v0.2 진행 중 (부분)**
 
-- 페이지 정렬, 타이포그래피, 여백 일관성
-- Jobs 탭 가독성 (긴 요청 텍스트 truncate, 시간 포맷 ko-KR 등)
-- 에러 표시 개선 (현재 `alert()` 기반 다수)
-- 로딩 상태 표시
-- 모바일 반응형
+- **상태**: [v0.2 iteration](iterations/v0.2.md)에서 핵심 항목 진행. 나머지는 진행 중 자연스럽게 보강.
+- **v0.2 핵심 (Kirin 명시):**
+  - 위키 페이지 frontmatter가 본문과 구분 안 됨 → 하단 "페이지 속성" 영역으로 분리, 표 형식, 기본 접힘 (SC-33)
+  - 페이지 노출 순서: 본문 → 페이지 속성(접힘) → 수정 요청 (SC-34)
+  - 페이지 속성에서 `sources`는 다운로드 링크 (SC-35)
+  - Jobs 탭 페이징 (SC-36)
+- **이월 (다음 이터레이션 또는 자연 보강):**
+  - 페이지 정렬, 타이포그래피, 여백 일관성
+  - 에러 표시 개선 (현재 `alert()` 기반 다수)
+  - 로딩 상태 표시
+  - 모바일 반응형
+  - 시간 포맷 ko-KR
 
 ---
 
@@ -128,15 +134,8 @@
 
 ## 메타
 
-### M-1. SPEC 문서 관리 체계 ✅ (v0.1 회고에서 진행)
+### M-1. v0.3+ 킥오프 체크리스트
 
-- v0.1 마무리 시점에 단일 SPEC.md → 분산 구조로 리팩터
-- README/REQUIREMENTS/ARCHITECTURE/components/decisions/iterations/reviews 분리
-- **현 상태**: 이 백로그 작성 시점에 진행 중. 완료되면 항목 제거.
-
-### M-2. v0.2 킥오프 체크리스트
-
-- [ ] 이 백로그 우선순위 정렬 (Kirin)
-- [ ] 각 항목 별도 GitHub Issue로 분리할지 결정 (현재는 vault 내 관리)
-- [ ] v0.2 iteration 파일 스코프 확정
-- [ ] Hawkeye에게 SC 보강 사전 협의 (신규 SC = SC-31~로 시작)
+- [ ] B-4(다중 페이지 분리), B-5(프롬프트 다듬기) 묶어서 다음 이터레이션 메인 테마
+- [ ] B-6 Lint 도입 시기 결정
+- [ ] GitHub Issue 도입 여부 재검토 (vault 내부 관리 vs 외부 추적)

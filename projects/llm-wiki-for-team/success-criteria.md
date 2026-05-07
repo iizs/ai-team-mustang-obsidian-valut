@@ -140,10 +140,11 @@
 - When: 텍스트 직접 편집 시도
 - Then: 편집 불가, 수정 요청 입력창만 제공
 
-**SC-20** [Advisory] 내부 링크 클릭 이동
+**SC-20** [Blocking] 내부 링크 클릭 이동
 - Given: 위키 페이지에 `[[다른페이지]]` 링크 존재
 - When: 링크 클릭
 - Then: 해당 위키 페이지로 이동
+- Note: v0.1에서 Advisory였으나 v0.2에서 Blocking 승격
 
 ## 원본 조회 UI
 
@@ -202,3 +203,40 @@
 - Given: Anthropic API 대신 Ollama URL로 설정 변경
 - When: 서비스 재시작 후 Ingest/Edit 실행
 - Then: Ollama 모델 경유로 위키 생성/수정 정상 동작
+
+## 자가 가입 / 사용자 관리 (v0.2 신규)
+
+**SC-31** [Blocking] 자가 가입 (signup)
+- Given: 비로그인 상태
+- When: `/signup`에서 이메일/패스워드 입력 후 등록
+- Then: 즉시 활성 계정으로 생성, 기본 `member` role 부여, 로그인 화면으로 이동
+- Note: 이메일 인증 없음 (SMTP 미설정). 향후 v0.3+에서 이메일 인증 검토.
+
+**SC-32** [Blocking] Admin 권한 부여 메뉴
+- Given: Admin 계정으로 로그인
+- When: 사용자 관리 화면 접근
+- Then: 사용자 목록 조회 가능 + role 변경(Member ↔ Admin) + 비활성화 가능
+
+## 위키 페이지 레이아웃 (v0.2 신규)
+
+**SC-33** [Blocking] frontmatter는 페이지 속성 영역으로 분리
+- Given: 위키 페이지 조회 중
+- When: 페이지 렌더링 확인
+- Then: frontmatter 내용은 본문과 분리된 "페이지 속성" 영역에 표 형식으로 표시. 기본 접힌 상태이며 사용자가 펼칠 수 있음.
+
+**SC-34** [Blocking] 위키 페이지 노출 순서
+- Given: 위키 페이지 조회 중
+- When: 페이지 렌더링 확인
+- Then: 위에서 아래로 본문 → 페이지 속성(접힘) → 수정 요청 입력창 순서로 노출됨
+
+**SC-35** [Blocking] 페이지 속성 sources 링크
+- Given: 페이지 속성 영역에 `sources` 항목이 있는 위키 페이지
+- When: `sources`의 항목 클릭
+- Then: 해당 원본 파일을 다운로드 (별도 미리보기 페이지 없음)
+
+## Jobs 탭 (v0.2 신규)
+
+**SC-36** [Blocking] Jobs 탭 페이징
+- Given: Jobs 탭 접근 (Admin 또는 Member)
+- When: Job 개수가 페이지 크기를 초과
+- Then: 페이지 크기 default 20건, 페이지 네비게이션 노출. 클라이언트에서 페이지 크기 변경 가능
