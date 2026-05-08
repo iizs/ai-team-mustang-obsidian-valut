@@ -26,7 +26,7 @@
 - [iterations/](iterations/) — 이터레이션별 목표·태스크·회고
   - [v0.1](iterations/v0.1.md) — MVP (완료)
   - [v0.2](iterations/v0.2.md) — 사용성·접근성 (완료)
-  - v0.3 — 미정 (B-4/B-5 또는 B-14 후보)
+  - [v0.3](iterations/v0.3.md) — LLM 파이프라인 다단계화 Phase A + 환경 초기화 (Planning)
 - [Backlog](backlog.md) — 정렬되지 않은 아이디어 풀
 - [reviews/](reviews/) — Breda/Hawkeye 리뷰 영구 보관
 
