@@ -289,3 +289,99 @@
   - (a) `/signup` 페이지가 표시되지 않거나 "Signup is disabled" 안내로 대체
   - (b) API는 403 Forbidden 반환
 - Default: `SIGNUP_ENABLED=true` (자가 가입 허용)
+
+## v0.3a — LLM 파이프라인 다단계화 (Phase A)
+
+> ADR-0011 (Ingest 파이프라인 다단계화)에 따른 검증 기준. Phase A는 `create` 액션만 실행하고 `merge_into`/`supersede`는 log 표시만 한다.
+
+**SC-41** [Blocking] Ingest LLM 컨텍스트에 `index.md` 주입
+- Given: Wiki Store에 1개 이상 페이지가 존재하고 `index.md`가 존재
+- When: 신규 INGEST Job이 처리되어 LLM 호출이 발생
+- Then: LLM에 전달되는 컨텍스트(system 또는 user 메시지)에 `index.md` 내용이 포함됨. 빈 wiki(첫 ingest) 시에는 빈 index 표시 또는 "no existing pages" 안내가 포함됨.
+
+**SC-42** [Blocking] LLM 출력 = JSON Plan 구조 + Pydantic 검증
+- Given: Ingest 호출
+- When: LLM 호출 시 `response_format={"type":"json_object"}` 인자를 일관되게 전달 (provider 무관, LiteLLM이 추상화)
+- Then:
+  - LLM 응답을 파싱하면 최상위 JSON 배열이며 각 항목은 `action ∈ {"create", "merge_into", "supersede"}` 필드를 포함
+  - `action="create"` 시 `page_path`(kebab-case `.md`, path traversal 거부), `content`(frontmatter 포함 markdown 전체) 필수
+  - `action="merge_into"` 시 `target`(.md), `merged_content` 필수
+  - `action="supersede"` 시 `target`(.md), `reason`, `new_content` 필수
+  - **Pydantic 모델로 스키마 검증** (action enum, 필드 존재, 타입). 검증 실패 시 SC-45로 위임
+
+**SC-43** [Blocking] `create` 액션 즉시 실행 + 충돌 시 자동 강등
+- Given: Plan에 `action="create"` 항목 N개
+- When: Phase A 디스패치
+- Then:
+  - **신규(충돌 없음)**: `wiki-store/<page_path>`에 파일 생성 + git commit. `index.md`/`log.md` 갱신은 기존(SC-16-b/16-c)과 동일.
+  - **충돌(같은 page_path 페이지가 이미 존재)**: 해당 항목을 **자동으로 `merge_into` 액션으로 강등**(`{action: "merge_into", target: <기존 page_path>, merged_content: <요청된 content>}`로 재구성). Phase A에서는 SC-44에 따라 skip + log 명시 (Phase B에서 실행). 사용자에게 데이터 손실 없음 보장.
+  - 시스템이 강제 주입할 항목: `sources` frontmatter에 원본 파일명 보장 (LLM 누락 시 시스템이 자동 추가, SC-14 보존)
+
+**SC-44** [Blocking] `merge_into` / `supersede` 액션 skip + log 표시 (Phase A)
+- Given: Plan에 `action ∈ {"merge_into", "supersede"}` 항목이 포함됨 — LLM이 직접 출력했거나, SC-43의 충돌 강등으로 시스템이 자동 변환했거나, target invalid 케이스 모두 포함
+- When: Phase A 디스패치
+- Then:
+  - 해당 액션은 **실행하지 않음** (대상 페이지 변경 없음)
+  - `log.md`의 해당 Job 항목에 일관된 라인 형식으로 명시:
+    - LLM 직접: `skipped (phase A): merge_into → [[target]]`
+    - 충돌 강등: `skipped (phase A): merge_into ← create-conflict → [[target]]`
+    - target invalid: `skipped (phase A): merge_into → [[target]] (target not found)`
+    - supersede도 같은 패턴으로 표시
+  - **Plan 전체 JSON을 `Job.payload`에 보존** (Jobs 탭에서 사용자 확인 + Phase B 도입 시 재실행/재검증 활용)
+  - Job은 SUCCESS로 종료 가능 (skip만으로 FAILED 처리 X). `create` 액션이 함께 있고 정상 실행됐으면 그 부분은 적용됨
+
+**SC-45** [Blocking] JSON 파싱 실패 시 graceful degrade + 명시 오류
+- Given: LLM 출력이 유효한 JSON Plan이 아님 (parse 실패 또는 schema mismatch)
+- When: 파이프라인이 응답 처리
+- Then:
+  - 1순위: 기존 4단계 fallback (`=== FILE: ===` 마커, frontmatter, dangling `---`, `#` 제목) 시도 → 페이지 생성 가능 시 정상 처리하되 `log.md`에 `legacy_fallback_used: <reason>` 표시
+  - 2순위: fallback도 실패 시 Job FAILED + `error_msg`에 LLM 출력 첫 200~500자 보존 (SC-11-b silent SUCCESS 방지 원칙 유지)
+
+**SC-46** [Advisory] 동일 주제 중복 ingest 시 plan에 `merge_into` 등장
+- Given: 동일/유사 주제 원본을 두 번째로 ingest (첫 번째 ingest로 관련 페이지가 wiki에 존재)
+- When: LLM이 plan을 출력
+- Then: plan에 `action="merge_into"` 또는 `action="supersede"`가 등장하고 `target`이 기존 페이지 하나를 가리킴
+- Note:
+  - LLM 비결정성으로 인해 **자동 테스트 대상 아님** (회귀 판단 불가)
+  - 운영 시 **실측 관측 후 대응** — 의미 있는 사례는 `reviews/YYYY-MM-DD-llm-merge-behavior.md`에 영구 보관 (Phase A 가치 검증 신호로 사용)
+  - Phase A에서는 SC-44에 따라 skip + log로 가시성만 확보. Phase B 도입 후 본격 검증으로 승격 검토.
+
+## v0.3a — 환경 초기화 스크립트
+
+**SC-47** [Blocking] `init_env.py` 기본 동작 (interactive)
+- Given: 새 환경에서 `python scripts/init_env.py` 실행, 옵션/환경변수 모두 미지정
+- When: 사용자가 prompt에 admin 이메일/패스워드 응답
+- Then:
+  - DB 스키마 생성 (`create_all`, 기존 DB 있으면 보존)
+  - `source_store_path` 디렉토리 생성 (없을 때만)
+  - `wiki_store_path` 디렉토리 생성 + git init + `index.md`/`log.md`/`_sheska.yaml` 초기화 (없을 때만)
+  - admin 계정 생성 (`role=admin`, `is_active=true`)
+  - 같은 이메일 사용자가 이미 있으면 스크립트가 명시적 안내 후 중단 (덮어쓰기 안전장치)
+
+**SC-48** [Blocking] `init_env.py --reset` 동작
+- Given: 기존 DB/source-store/wiki-store가 존재하는 환경
+- When: `python scripts/init_env.py --reset` 실행
+- Then:
+  - DB 파일, source store, wiki store **모두 삭제 후 재생성**
+  - admin 계정 새로 생성
+  - 이전 데이터 영구 손실 — 실행 전 사용자 확인 prompt 필수 (`Are you sure? [y/N]`)
+
+**SC-49** [Blocking] `init_env.py --non-interactive` 모드
+- Given: `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD` 환경변수 또는 `--admin-email`/`--admin-password` 인자 제공
+- When: `python scripts/init_env.py --non-interactive` 실행
+- Then:
+  - prompt 없이 즉시 실행 (CI 등 자동화 가능)
+  - 필수 값 미지정 시 명시적 오류 후 비-zero exit code (silent fail X)
+
+**SC-50** [Blocking] `init_env.py` 환경변수 default 채우기
+- Given: 환경변수 `INITIAL_ADMIN_EMAIL=admin@example.com` 설정 + interactive 실행
+- When: `python scripts/init_env.py` 실행 (옵션 미지정)
+- Then: prompt에 환경변수 값이 default로 미리 채워짐 (사용자가 Enter만 눌러도 수용 가능). password도 동일.
+
+**SC-51** [Blocking] Plan frontmatter `type` enum 위반 시 시스템 보정
+- Given: LLM이 출력한 plan의 `create`/`merge_into`/`supersede` 항목 `content`/`merged_content`/`new_content` 안의 frontmatter `type` 값이 SC-12 enum (`concept | process | policy | reference | glossary`)에 포함되지 않음
+- When: 시스템이 plan을 처리
+- Then:
+  - 해당 항목의 `type`을 **`reference`로 자동 보정** (v0.2 자동 frontmatter 정책과 일관)
+  - `log.md`에 `frontmatter_type_normalized: <원래 값> → reference` 표시 (가시성)
+  - 항목 자체는 정상 처리 (FAILED 아님). 데이터 보존 우선.

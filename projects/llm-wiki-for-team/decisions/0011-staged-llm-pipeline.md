@@ -1,8 +1,8 @@
 # ADR-0011 — Ingest 파이프라인 다단계화 (Phase A)
 
-- **상태**: Proposed (v0.3 킥오프 검토 중)
+- **상태**: Accepted (v0.3 킥오프 — 2026-05-08)
 - **결정일**: 2026-05-08
-- **결정자**: Kirin, Roy
+- **결정자**: Kirin, Roy (+ Breda/Hawkeye 합동 검토)
 
 ## 컨텍스트
 
@@ -60,8 +60,19 @@ v0.1/v0.2 Ingest 파이프라인은 **원본 전체 → 단일 LLM 호출 → `=
     - `create` 액션: 즉시 실행 (페이지 작성)
     - `merge_into`, `supersede`: **Phase A에서는 실행하지 않고 `log.md`에 표시만** (사용자 인지 + Phase B 도입 전 검증용)
 5. **Pydantic 검증** — Plan JSON 파싱 실패 시 명시적 FAILED + 원본 출력 일부 `error_msg`에 보존
-6. **Graceful degrade** — JSON 파싱 실패해도 기존 마커/frontmatter fallback 시도(과도기 호환)
-7. **모델 1 채택 (단일 호출에 풀 콘텐츠 포함)** — 별도 ADR-0012로 보강 가능 (Plan 모델 비교)
+6. **Graceful degrade (다단계)**:
+    - 1순위: JSON parse + Pydantic 검증
+    - 2순위: 기존 4단계 fallback (`=== FILE: ===` 마커 / `---\nyaml\n---` / dangling `---` / `# 제목`만) — `log.md`/Jobs 탭에 "JSON parse failed, used legacy fallback" 명시
+    - 3순위: 모두 실패 → Job FAILED + LLM 출력 snippet 보존
+7. **모델 1 채택 (단일 호출에 풀 콘텐츠 포함)**
+8. **JSON 강제 메커니즘**: LiteLLM `response_format={"type":"json_object"}` 통일 (Anthropic/Ollama 공통). Provider별 분기 없음. graceful degrade가 안전망. — *(Kirin 결정 2026-05-08)*
+9. **`create` 충돌 정책**: `create` 액션의 `page_path`가 기존 페이지명과 충돌 시 **자동으로 `merge_into` 액션으로 강등**. Phase A에서는 어차피 skip + log 명시되므로 데이터 손실 없음. — *(Kirin 결정 2026-05-08)*
+10. **Plan 안전장치**:
+    - Path traversal 거부 (page_path는 kebab-case 슬러그만 허용)
+    - `merge_into`/`supersede`의 `target` 존재 검증 (없으면 skip + log "target invalid")
+    - `sources` frontmatter는 시스템이 `[원본 파일명]`을 강제 주입 (LLM 신뢰 X, SC-14 보장)
+    - Plan frontmatter `type` enum 위반 시 `reference` 기본값으로 보정 — *(Kirin 결정 2026-05-08)*
+11. **가시성**: Plan 전체 JSON을 `Job.payload`에 보존 + Jobs 탭에서 plan 표시 (어떤 액션이 실행/skip 됐는지 사용자가 인지)
 
 ### Phase B (v0.3b 또는 v0.4)
 
