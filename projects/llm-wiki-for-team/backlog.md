@@ -130,6 +130,23 @@
 - v0.1: PDF/TXT/MD만
 - v0.2+: `python-docx` 도입 검토
 
+### B-14. DB 스키마 마이그레이션 자동화 ⭐
+
+- **배경**: v0.2에서 `User.created_at` 컬럼 추가했으나 기존 DB는 v0.1 스키마. SQLAlchemy `create_all`만 쓰는 구조 → 기존 인스턴스 로그인 깨짐. Kirin 회피: DB 삭제 + reseed.
+- **방향 후보**:
+  - alembic 도입 (Python 표준)
+  - 기동 시 `inspect → ALTER` 자동 적용 (단순)
+  - 마이그레이션 스크립트 폴더 + 수동 실행
+- **부수 작업**:
+  - SC 작성 가이드 보강: "기존 인스턴스 업그레이드" 시나리오를 SC에 포함하도록
+
+### B-15. Race condition 명시 가드 (마지막 Admin 보호)
+
+- **배경**: `_active_admin_count()` 호출과 commit 사이 시간차로 동시 다중 admin demote 시 우회 가능
+- **현재 상태**: SQLite 직렬화로 사실상 보호. 내부 운영 위주라 실제 위험 거의 없음
+- **개선**: `SELECT ... FOR UPDATE` 또는 명시적 트랜잭션 lock으로 명시화
+- **참조**: [reviews/2026-05-08-hawkeye-v0.2-validation.md](reviews/2026-05-08-hawkeye-v0.2-validation.md)
+
 ---
 
 ## 메타

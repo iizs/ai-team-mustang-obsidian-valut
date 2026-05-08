@@ -46,3 +46,7 @@ Discord에서 휘발될 리뷰 결과를 합의된 시점에 vault로 옮긴다.
 - [v0.1 통합 요약](2026-05-07-v0.1-completion-summary.md) — 3 Phase 검증 + 핫픽스 검증 통합
 
 상세 Discord 원본은 휘발됐으나, 핵심 결정과 결과는 위 요약에 정리되어 있다.
+
+## v0.2
+
+- [v0.2 통합 검증](2026-05-08-hawkeye-v0.2-validation.md) — Hawkeye, SC-20+SC-31~40 PASS, Advisory 1건, 사후 발견 1건(DB 마이그레이션)
