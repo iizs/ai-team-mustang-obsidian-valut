@@ -3,47 +3,28 @@
 정렬되지 않은 아이디어/작업 풀. 이터레이션 킥오프 시 여기서 끌어와 우선순위·담당·DoD 부여한다.
 
 > 이터레이션에서 작업 중인 항목은 [iterations/](iterations/) 참조.
+> ID는 영구. 완료된 항목은 [완료된 항목](#완료된-항목-reference) 섹션 참조.
 
 ---
 
-## 사용자 경험
+## 운영 안정화
 
-### B-1. Web UI `[[wikilink]]` 클릭 이동 (SC-20 완성) — **v0.2 진행 중**
+### B-14. DB 스키마 마이그레이션 자동화 ⭐
 
-- **상태**: [v0.2 iteration](iterations/v0.2.md)에서 진행. SC-20을 Blocking으로 승격.
-- **현 상태**: SPEC §SC-20 — Obsidian에서는 동작하지만 Web UI에서 `[[페이지명]]`은 plain text로 보임
-- **필요 작업**:
-  - Markdown 렌더러(`ReactMarkdown`)에 커스텀 plugin 추가
-  - `[[페이지명]]` → `<a href="/wiki/페이지명">페이지명</a>` 변환
-  - 내부 페이지 존재 여부 확인 → 없는 링크는 visual cue (회색 등)
-- **관련 파일**: `frontend/src/app/wiki/[...slug]/page.tsx`
+- **배경**: v0.2에서 `User.created_at` 컬럼 추가했으나 기존 DB는 v0.1 스키마. SQLAlchemy `create_all`만 쓰는 구조 → 기존 인스턴스 로그인 깨짐. Kirin 회피: DB 삭제 + reseed.
+- **방향 후보**:
+  - alembic 도입 (Python 표준)
+  - 기동 시 `inspect → ALTER` 자동 적용 (단순)
+  - 마이그레이션 스크립트 폴더 + 수동 실행
+- **부수 작업**:
+  - SC 작성 가이드 보강: "기존 인스턴스 업그레이드" 시나리오를 SC에 포함하도록
 
-### B-2. 신규 계정 생성 UI — **v0.2 진행 중**
+### B-15. Race condition 명시 가드 (마지막 Admin 보호)
 
-- **상태**: [v0.2 iteration](iterations/v0.2.md)에서 진행.
-- **방향 (v0.2 킥오프 결정)**: Admin이 일일이 생성하는 대신 사용자가 자가 가입 (`/signup`). Admin은 사용자 목록에서 권한 조정만.
-- **이메일 인증**: SMTP 미설정으로 v0.2 범위 외. 즉시 활성으로 시작.
-- **필요 작업**:
-  - `/signup` 페이지 + 백엔드 엔드포인트 (SC-31)
-  - Admin 사용자 관리 화면: 목록 + role 변경(Member ↔ Admin) + 비활성화 (SC-32)
-- **이월된 미세 항목 (v0.3+)**:
-  - 첫 Admin 부트스트랩: `seed_admin.py` 유지하되, 환경변수 `INITIAL_ADMIN_EMAIL/PASSWORD` 자동 시딩 옵션 검토
-  - 이메일 인증 (SMTP 도입 후)
-
-### B-3. UI 정돈 — **v0.2 진행 중 (부분)**
-
-- **상태**: [v0.2 iteration](iterations/v0.2.md)에서 핵심 항목 진행. 나머지는 진행 중 자연스럽게 보강.
-- **v0.2 핵심 (Kirin 명시):**
-  - 위키 페이지 frontmatter가 본문과 구분 안 됨 → 하단 "페이지 속성" 영역으로 분리, 표 형식, 기본 접힘 (SC-33)
-  - 페이지 노출 순서: 본문 → 페이지 속성(접힘) → 수정 요청 (SC-34)
-  - 페이지 속성에서 `sources`는 다운로드 링크 (SC-35)
-  - Jobs 탭 페이징 (SC-36)
-- **이월 (다음 이터레이션 또는 자연 보강):**
-  - 페이지 정렬, 타이포그래피, 여백 일관성
-  - 에러 표시 개선 (현재 `alert()` 기반 다수)
-  - 로딩 상태 표시
-  - 모바일 반응형
-  - 시간 포맷 ko-KR
+- **배경**: `_active_admin_count()` 호출과 commit 사이 시간차로 동시 다중 admin demote 시 우회 가능
+- **현재 상태**: SQLite 직렬화로 사실상 보호. 내부 운영 위주라 실제 위험 거의 없음
+- **개선**: `SELECT ... FOR UPDATE` 또는 명시적 트랜잭션 lock으로 명시화
+- **참조**: [reviews/2026-05-08-hawkeye-v0.2-validation.md](reviews/2026-05-08-hawkeye-v0.2-validation.md)
 
 ---
 
@@ -77,7 +58,35 @@
 
 ---
 
-## 컴포넌트
+## 보안 / 계정
+
+### B-16. Rate limiting (signup 봇 방어)
+
+- **배경**: SC-31 자가 가입은 v0.2에서 무방어. Public 운영 시 봇 가입 가능 — Kirin 결정으로 v0.3+ 보안 이터레이션 일괄 처리.
+- **방향 후보**:
+  - IP 기반 단순 rate limit (예: 1분 5회 가입 시도)
+  - FastAPI 미들웨어 (slowapi 등)
+  - Reverse proxy(nginx) 단계에서 처리
+- **부수**: login 시도, source 업로드 등 다른 엔드포인트도 같이 검토
+
+### B-17. 이메일 인증 (SMTP 도입)
+
+- **배경**: v0.2 자가 가입은 즉시 활성. SMTP 미설정 회피 결정. 운영 단계에서는 이메일 인증 필요
+- **필요 작업**:
+  - SMTP 설정(`.env` 변수)
+  - 가입 후 인증 메일 발송 → 링크 클릭 시 활성화
+  - 미인증 사용자 처리 정책 (제한된 사용 vs 완전 차단)
+  - 인증 토큰 모델 (DB) + 만료 정책
+
+### B-18. `INITIAL_ADMIN_*` 환경변수 자동 시딩
+
+- **배경**: v0.1에서 `seed_admin.py` CLI를 사후 추가. 첫 부팅 시 자동 시딩 옵션 있으면 운영 편의 ↑
+- **방향**: `.env`의 `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD` 있고 사용자 0명일 때 자동 시딩 (한 번만)
+- **주의**: 초기 부팅 후 .env 변경 → 재시딩 방지 로직 필요
+
+---
+
+## 컴포넌트 보강
 
 ### B-6. Lint 도입 ([ADR-0005](decisions/0005-lint-deferred.md) 해소)
 
@@ -99,9 +108,28 @@
 - 동일 페이지 동시 수정 충돌 처리 정책 필요
 - 실현 시 [ADR-0006](decisions/0006-fastapi-backgroundtasks.md) Superseded 가능성
 
+### B-19. Sources 목록 페이징
+
+- **배경**: Sources 목록도 시간 지나면서 누적되어 페이징 필요 (Kirin 2026-05-08 검토 중 발견)
+- **방향**: Jobs 페이징(SC-36)과 동일한 패턴 — `?page=&size=`, 응답 `{items, total, page, size}`
+- **필요 작업**:
+  - 백엔드 `GET /api/sources/` 페이징 지원
+  - 프론트 `/sources` UI에 페이지 크기 selector + Prev/Next + "Page N of M" + "No sources" 메시지
+  - 정렬 기준 결정 (filename asc 또는 uploaded_at desc 등)
+
+### B-20. UI 폴리싱 (B-3 이월)
+
+- **상태**: B-3 본체는 v0.2에서 핵심만 완료. 아래는 자연 보강 또는 별도 이터레이션
+- **항목**:
+  - 페이지 정렬, 타이포그래피, 여백 일관성
+  - 에러 표시 개선 (현재 `alert()` 기반 다수)
+  - 로딩 상태 표시
+  - 모바일 반응형
+  - 시간 포맷 ko-KR (또는 i18n)
+
 ---
 
-## 인프라
+## 큰 기능 (가치 검증 후)
 
 ### B-9. SSO
 
@@ -130,29 +158,35 @@
 - v0.1: PDF/TXT/MD만
 - v0.2+: `python-docx` 도입 검토
 
-### B-14. DB 스키마 마이그레이션 자동화 ⭐
-
-- **배경**: v0.2에서 `User.created_at` 컬럼 추가했으나 기존 DB는 v0.1 스키마. SQLAlchemy `create_all`만 쓰는 구조 → 기존 인스턴스 로그인 깨짐. Kirin 회피: DB 삭제 + reseed.
-- **방향 후보**:
-  - alembic 도입 (Python 표준)
-  - 기동 시 `inspect → ALTER` 자동 적용 (단순)
-  - 마이그레이션 스크립트 폴더 + 수동 실행
-- **부수 작업**:
-  - SC 작성 가이드 보강: "기존 인스턴스 업그레이드" 시나리오를 SC에 포함하도록
-
-### B-15. Race condition 명시 가드 (마지막 Admin 보호)
-
-- **배경**: `_active_admin_count()` 호출과 commit 사이 시간차로 동시 다중 admin demote 시 우회 가능
-- **현재 상태**: SQLite 직렬화로 사실상 보호. 내부 운영 위주라 실제 위험 거의 없음
-- **개선**: `SELECT ... FOR UPDATE` 또는 명시적 트랜잭션 lock으로 명시화
-- **참조**: [reviews/2026-05-08-hawkeye-v0.2-validation.md](reviews/2026-05-08-hawkeye-v0.2-validation.md)
-
 ---
 
 ## 메타
 
 ### M-1. v0.3+ 킥오프 체크리스트
 
-- [ ] B-4(다중 페이지 분리), B-5(프롬프트 다듬기) 묶어서 다음 이터레이션 메인 테마
+- [ ] v0.3 테마 결정 (운영 안정화 vs LLM 품질 vs 보안 베이스 등)
 - [ ] B-6 Lint 도입 시기 결정
 - [ ] GitHub Issue 도입 여부 재검토 (vault 내부 관리 vs 외부 추적)
+
+---
+
+## 완료된 항목 (Reference)
+
+ID 영속성을 위해 보존. 상세는 해당 iteration 회고 참조.
+
+### B-1. Web UI `[[wikilink]]` 클릭 이동 — Done (v0.2)
+
+SC-20을 Advisory에서 Blocking으로 승격. `remark-wiki-link` 플러그인 + 미존재 페이지 안내 (SC-39).
+- 회고: [iterations/v0.2.md](iterations/v0.2.md)
+
+### B-2. 신규 계정 생성 UI — Done (v0.2)
+
+자가 가입 (`/signup`, SC-31) + Admin 권한 부여 메뉴 (`/admin/users`, SC-32) + `SIGNUP_ENABLED` 환경변수 (SC-40).
+이월 항목은 B-17(이메일 인증), B-18(INITIAL_ADMIN_* 시딩)로 분리.
+- 회고: [iterations/v0.2.md](iterations/v0.2.md)
+
+### B-3. UI 정돈 — Done (v0.2, 핵심만)
+
+위키 페이지 레이아웃 (본문 → Properties 접힘 → Edit Request, SC-33/34/35), Jobs 페이징 (SC-36).
+이월 폴리싱 항목은 B-20으로 분리.
+- 회고: [iterations/v0.2.md](iterations/v0.2.md)
