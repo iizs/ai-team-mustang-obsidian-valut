@@ -385,3 +385,124 @@
   - 해당 항목의 `type`을 **`reference`로 자동 보정** (v0.2 자동 frontmatter 정책과 일관)
   - `log.md`에 `frontmatter_type_normalized: <원래 값> → reference` 표시 (가시성)
   - 항목 자체는 정상 처리 (FAILED 아님). 데이터 보존 우선.
+
+## v0.3.1 — Phase B 액션 실행 + Wiki Command + Page Delete
+
+> ADR-0012 (Phase B)에 따른 검증 기준. Phase A에서 skip이었던 `merge_into`/`supersede`를 정상 실행으로 전환하고, 신규 `delete` 액션 + WIKI_COMMAND Job 타입 도입.
+
+**SC-52** [Blocking] `merge_into` 액션 정상 실행
+- Given: Plan에 `action="merge_into"`, `target`이 wiki-store에 실제 존재하는 페이지
+- When: Phase B 디스패치
+- Then:
+  - 기존 target 페이지 read → **Plan의 `merged_content`를 그대로 적용**(재호출 없음, Kirin 결정 옵션 a) + git commit
+  - SC-12 frontmatter 5필드 보존 (LLM이 빠뜨리면 시스템 보강)
+  - **frontmatter 보존 정책 (시스템 적용, LLM 출력보다 우선):**
+    - `created`: **기존 보존** (변경 금지)
+    - `last_updated`: **갱신** (현재 시각)
+    - `tags`: 기존 ∪ 새 content tags (set union, 중복 제거)
+    - `type`: **기존 우선 유지** (SC-12 enum 안정성)
+    - `sources`: 기존 ∪ 새 content sources (set union, 중복 제거). **INGEST 컨텍스트일 때만** 시스템이 source filename 강제 주입(SC-14 보존). WIKI_COMMAND는 source 개념 없으므로 강제 주입 없음.
+  - SC-51 type enum 보정 적용 (위반 값일 때만)
+  - log.md에 `executed: merge_into → [[target]]` 라인 추가 (Phase A의 `skipped` 대체)
+- Note: target invalid(존재하지 않는 페이지)는 SC-44 패턴 그대로 skip + log "(target not found)". 통합 품질 부족이 실측에서 드러나면 v0.4+에서 옵션 b(재호출 보강)로 진화 검토.
+
+**SC-53** [Blocking] `supersede` 액션 정상 실행
+- Given: Plan에 `action="supersede"`, `target`/`reason`/`new_content` 모두 유효
+- When: Phase B 디스패치
+- Then:
+  - 기존 target 페이지 read → **Plan의 `new_content`를 그대로 적용**(재호출 없음, Kirin 결정 옵션 a)으로 완전 대체 + git commit
+  - log.md에 `executed: supersede → [[target]] (reason: <reason>)` 라인 추가
+  - reason은 LLM이 표현한 갈아엎기 사유로 그대로 보존 (요약/변형 X)
+  - frontmatter는 SC-52의 보존 정책(created 보존, last_updated 갱신, type 기존 유지) 동일 적용. supersede는 본문 갈아엎기지만 메타 일관성을 위해 동일 규칙.
+  - SC-51 type 보정 적용
+- Note: target invalid 시 SC-44 패턴 동일 (skip + log "target not found")
+
+**SC-54** [Blocking] `delete` 액션 정상 실행 (WIKI_COMMAND 전용)
+- Given: **WIKI_COMMAND** Job의 Plan에 `action="delete"`, `target`이 일반 위키 페이지 (예약 파일 X), `reason` 포함
+- When: Phase B 디스패치
+- Then:
+  - `git rm <target>` 실행 + git commit ("delete: <target> [job:<id>]")
+  - log.md에 `executed: delete → [[target]] (reason: <reason>)` 라인 추가
+- Note:
+  - 삭제 후 다른 페이지의 `[[삭제된페이지]]` 링크는 SC-39 안내 페이지로 자연 노출 (Lint(B-6)가 사후 정리)
+  - **delete는 WIKI_COMMAND에서만 허용** — INGEST plan에서 delete 등장 시 거부 (SC-63 참조). Kirin 결정: "INGEST는 축적 원칙, 삭제는 사용자 명시 명령일 때만"
+
+**SC-55** [Blocking] `create` 충돌 자동 강등의 Phase B 정상 실행
+- Given: Plan의 `create` 항목이 기존 페이지명과 충돌 → SC-43에 따라 시스템이 자동 `merge_into`로 강등
+- When: Phase B 디스패치 (Phase A의 skip 제거)
+- Then:
+  - 강등된 `merge_into`가 SC-52에 따라 정상 실행
+  - log.md에 `executed: merge_into ← create-conflict → [[target]]` 라인 (Phase A `skipped` 형식 대체)
+
+**SC-56** [Blocking] `delete` 안전장치 — 예약 파일 보호
+- Given: Plan의 `delete` 항목 `target`이 예약 파일(`index.md`, `log.md`, `_sheska.yaml`) 또는 `_`로 시작하는 시스템 파일
+- When: Phase B 디스패치
+- Then:
+  - 해당 항목 거부 (파일 변경 없음)
+  - log.md에 `rejected: delete → [[target]] (reserved file)` 라인 추가
+  - 같은 plan의 다른 액션은 정상 처리 (전체 Job FAILED는 아님). plan_summary에 `rejected` outcome 보존
+
+**SC-57** [Blocking] `WIKI_COMMAND` Job 등록 + 즉시 응답
+- Given: 인증된 사용자 — **Member 또는 Admin 모두 허용** (Kirin 결정: 옵션 a, Edit 권한과 일관). 비인증 호출은 401.
+- When: `POST /api/wiki/commands` 본문 `{"command_text": "<자연어>"}`
+- Then:
+  - `WIKI_COMMAND` 타입 Job을 큐에 등록 (payload `{command_text}`, `created_by=현재 user`)
+  - 즉시 `{"job_id": "...", "status": "queued"}` 응답 (HTTP 202)
+  - SC-17-a/b 회귀 — Member는 본인 WIKI_COMMAND Job만, Admin은 전체 조회 가능
+- Note: command_text 빈 문자열/공백만 입력 시 422 (사전 검증). v0.4+ 권한 세분화 도입 시 별도 정책 검토.
+
+**SC-58** [Blocking] `WIKI_COMMAND` 실행 → Plan 생성 → 액션 순차 실행
+- Given: WIKI_COMMAND Job이 워커에 픽업됨
+- When: `run_wiki_command()` 호출
+- Then:
+  - LLM에 `command_text` + `index.md` 컨텍스트 + `prompts/wiki_command.txt` 전달
+  - LLM이 Plan(JSON, INGEST 동일 스키마) 출력
+  - Plan 액션을 순차 실행 (create/merge_into/supersede/delete 모두 SC-43/52/53/54 적용)
+  - log.md/index.md 갱신 (SC-16-b/c 동일 동작)
+  - graceful degrade는 INGEST와 동일 (SC-45)
+
+**SC-59** [Blocking] `WIKI_COMMAND` 빈 plan 처리
+- Given: LLM이 유효 JSON이지만 `actions=[]` (해석 실패 또는 변경 불필요로 판단)
+- When: 디스패치
+- Then:
+  - 파일 변경 없음, Job SUCCESS 종료
+  - log.md에 `WIKI_COMMAND | SUCCESS | job_id: <id>` + `- note: no actions in plan` 라인
+  - **FAILED 처리하지 않음** — LLM이 "할 일 없음"으로 판단하는 케이스를 정상 동작으로 인정
+
+**SC-60** [Blocking] Wiki Command UI 동작
+- Given: 인증된 사용자가 `/command` 페이지 또는 nav 진입점에 접근
+- When: 자연어 입력창에 명령 입력 후 Submit
+- Then:
+  - `POST /api/wiki/commands` 호출 → "queued" 응답 표시
+  - Jobs 탭에서 해당 WIKI_COMMAND Job 진행 상태 추적 가능 (SC-17-a/b 회귀)
+  - 빈 입력은 클라이언트에서 비활성/거부
+
+**SC-61** [Blocking] log.md `executed:` / `rejected:` / `skipped:` 라인 형식 통일
+- Given: Phase B 액션 처리 완료
+- When: log.md 확인
+- Then: 라인 형식이 일관되게 다음 패턴 중 하나:
+  - `- executed: merge_into → [[target]]`
+  - `- executed: merge_into ← create-conflict → [[target]]`
+  - `- executed: supersede → [[target]] (reason: ...)`
+  - `- executed: delete → [[target]] (reason: ...)`
+  - `- rejected: delete → [[target]] (reserved file)` — 예약 파일 보호 (SC-56)
+  - `- rejected: delete → [[target]] (forbidden in INGEST)` — INGEST에서 delete 시도 (SC-63)
+  - `- skipped: merge_into → [[target]] (target not found)` — invalid target (SC-44)
+  - `- failed: <action> → [[target]] (error: ...)` — 액션 실행 중 예외 (다른 액션은 계속 진행)
+- 라인 prefix(`executed`/`rejected`/`skipped`/`failed`)로 outcome 분리 추적 가능
+
+**SC-62** [Advisory] 삭제된 페이지 `[[link]]` 클릭 시 SC-39 안내 (회귀)
+- Given: 페이지 P 삭제 후, 다른 페이지에 `[[P]]` 링크가 잔존
+- When: 사용자가 `[[P]]` 클릭
+- Then: SC-39 "This page does not yet exist" 안내 페이지로 자연 노출 (회귀 보장)
+- Note: Lint(B-6)가 도입되면 잔존 링크 정리. v0.3.1에서는 자연 동작에만 의존.
+
+**SC-63** [Blocking] INGEST plan에서 `delete` 액션 거부
+- Given: INGEST Job의 LLM 출력 Plan에 `action="delete"` 항목이 포함됨
+- When: 시스템이 plan을 처리
+- Then:
+  - 해당 항목 거부 (파일 변경 없음)
+  - log.md에 `rejected: delete → [[target]] (forbidden in INGEST)` 라인 추가
+  - 같은 plan의 다른 액션(create/merge_into/supersede)은 정상 처리 — 전체 Job FAILED 아님
+  - plan_summary에 outcome `rejected_forbidden_in_ingest`로 보존 (Jobs 탭 가시성)
+- Note: Kirin 결정 — INGEST는 축적 원칙(LLM은 축적, 삭제는 사용자 명시 명령), delete는 WIKI_COMMAND에서만 허용. Plan validator 또는 dispatcher 단계에서 차단.

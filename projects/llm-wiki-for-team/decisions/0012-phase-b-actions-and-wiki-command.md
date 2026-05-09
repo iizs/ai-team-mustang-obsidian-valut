@@ -1,7 +1,7 @@
 # ADR-0012 — Phase B: Plan 액션 실행 + Wiki Command + Page Delete
 
-- **상태**: Proposed (v0.3.1 킥오프 검토 중)
-- **결정일**: 2026-05-09 (예정)
+- **상태**: Accepted (v0.3.1 킥오프 — 2026-05-09)
+- **결정일**: 2026-05-09
 - **결정자**: Kirin, Roy (+ Breda/Hawkeye 합동 검토)
 
 ## 컨텍스트
@@ -17,8 +17,10 @@ Phase B는 (A) Plan 액션을 실제 실행하고, (B) 사용자가 자연어 �
 
 ### A. Plan 액션 실행
 
-- **`merge_into`**: 기존 페이지 read → LLM이 `merged_content`를 통합본으로 반영 → 덮어쓰기 + git commit + log "executed: merge_into → [[target]]"
-- **`supersede`**: 기존 페이지 read → LLM이 새 본문으로 대체 → 덮어쓰기 + git commit + log "executed: supersede → [[target]] (reason: ...)"
+- **`merge_into`**: Plan 첫 호출의 `merged_content`를 그대로 기존 파일에 덮어쓰기 + git commit + log "executed: merge_into → [[target]]"
+  - **재호출 X** (옵션 a 채택, Kirin 결정 2026-05-09). 통합 품질 부족 시 v0.4+에서 옵션 b(재호출 보강)로 진화 검토.
+  - **frontmatter 정책**: `created` 기존 보존 / `last_updated` 갱신 / `tags` set union / `type` 기존 유지 (SC-12 enum 안정) / `sources` set union (INGEST job일 때만 시스템 강제 주입)
+- **`supersede`**: Plan의 `new_content`로 기존 파일 대체 + git commit + log "executed: supersede → [[target]] (reason: ...)"
 - **`create` 충돌 자동 강등**: Phase A에서는 `merge_into`로 강등 후 skip이었으나, Phase B에서는 강등된 `merge_into`를 정상 실행
 
 ### B. Wiki Command (다중 페이지 작업 진입점)
@@ -26,17 +28,21 @@ Phase B는 (A) Plan 액션을 실제 실행하고, (B) 사용자가 자연어 �
 - 신규 Job 타입 **`WIKI_COMMAND`**
 - payload: `{command_text: <자연어 명령>}`
 - 처리 흐름:
-  1. LLM에 명령 + `index.md` 컨텍스트 전달
+  1. LLM에 명령 + `index.md` 컨텍스트 + `prompts/wiki_command.txt` 전달
   2. LLM이 Plan(JSON, INGEST와 동일 스키마) 생성
   3. Plan의 액션들을 순차 실행 (create/merge_into/supersede/delete)
   4. log.md/index.md 갱신
-- UI: 별도 탭 또는 페이지 (예: `/command`) — nav 진입점, 자연어 입력창
+- UI: 별도 탭 또는 페이지 (예: `/command`) — nav 진입점, 자연어 입력창. 제출 후 Jobs 탭으로 자동 이동.
+- 권한: **Member/Admin 둘 다 가능** (Edit과 일관, Kirin 결정 2026-05-09)
 - 사용자 승인 절차: **도입 안 함** (v0.4+ 검토; 도입 시 웹소켓/이슈트래킹 수준 복잡도 필요)
 
 ### C. Page Delete
 
 - Plan 액션 신규 **`delete`**: payload `{action: "delete", target: "<existing-page>.md", reason: "..."}`
+- **허용 범위: WIKI_COMMAND 전용** (Kirin 결정 2026-05-09). INGEST plan에서 delete 등장하면 거부 + log "rejected: delete in INGEST (forbidden)".
+  - 이유: Ingest는 축적 원칙(LLM은 축적, 삭제는 Lint와 명시 명령에서). delete는 사용자 명시적 의도일 때만.
 - 처리: 파일 삭제 + git commit + log "executed: delete → [[target]] (reason: ...)"
+- 안전장치: 예약 파일(`index.md`/`log.md`/`_sheska.yaml`/`_`로 시작) 거부 + log "rejected: ... (reserved file)"
 - 삭제 후 `[[삭제된페이지]]` 클릭은 v0.2 SC-39 안내 페이지로 자연 처리 (404 톤)
 - redirect: 도입 안 함 (Kirin 결정)
 - Lint(B-6)가 사후 정리: 삭제된 페이지 참조하는 다른 페이지의 `[[링크]]` 정리는 Lint 단계
