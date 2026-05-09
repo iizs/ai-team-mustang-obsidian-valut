@@ -51,3 +51,4 @@ A안 / B안 / C안 비교.
 | [0009](0009-edit-single-page.md) | Edit Flow: 단일 페이지 컨텍스트 | Accepted |
 | [0010](0010-log-md-no-request-text.md) | log.md 기록 범위: 요청 전문 미포함 | Accepted |
 | [0011](0011-staged-llm-pipeline.md) | Ingest 파이프라인 다단계화 (Phase A) | Accepted |
+| [0012](0012-phase-b-actions-and-wiki-command.md) | Phase B: Plan 액션 실행 + Wiki Command + Page Delete | Proposed |
