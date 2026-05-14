@@ -523,32 +523,36 @@
   - LLM이 tool 호출 없는 응답을 반환하면 **자연 종료** → Job SUCCESS
   - 한 번이라도 tool 호출 발생하면 모든 step이 `Job.payload.steps`에 기록됨
 
-**SC-65** [Blocking] Loop 안전장치 4종
+**SC-65** [Blocking] Loop 안전장치 5종
 - Given: Agentic loop 실행 중
 - When: 다음 조건 중 하나가 트리거됨
 - Then:
   - **`max_iterations` 초과** (기본 20회): loop abort + Job FAILED + `error_msg`에 "max_iterations reached"
   - **`max_tool_calls` 초과** (기본 50회): 동일
-  - **`timeout` 초과** (기본 5분): 동일
-  - **이상 패턴 감지** — 같은 tool + 동일 인자가 연속 3회 호출되면 abort + Job FAILED + `error_msg`에 "stuck pattern detected: <tool>(<args>)"
-- 임계값은 `.env`로 조정 가능 (선택)
+  - **`timeout` 초과** (기본 300초): 동일
+  - **이상 패턴 감지** — 같은 tool + 동일 인자(hash)가 연속 3회 호출되면 abort + Job FAILED + `error_msg`에 "stuck pattern detected: <tool>(<args_hash>)"
+  - **`stop_reason == "max_tokens"`** — Anthropic API가 context limit 도달로 응답을 잘랐을 때: loop abort + Job FAILED + `error_msg`에 "LLM hit context limit (max_tokens stop_reason)"
+- 임계값(`MAX_ITERATIONS`, `MAX_TOOL_CALLS`, `LOOP_TIMEOUT_SEC`, `STUCK_PATTERN_THRESHOLD`)은 `.env`로 조정 가능
 
 **SC-66** [Blocking] 사용자 취소 (graceful abort)
-- Given: Agentic loop 진행 중인 Job, 사용자가 UI 또는 API에서 취소 요청
-- When: `Job.status = cancelling`으로 설정됨
+- Given: Agentic loop 진행 중인 Job (`status=processing`)
+- When: 사용자가 **`POST /api/jobs/{id}/cancel`** 호출 (UI Cancel 버튼이 이 엔드포인트 사용)
 - Then:
+  - API가 `Job.status = cancelling`으로 설정 + 즉시 응답 (loop abort는 비동기)
   - 다음 iteration 진입 전 시스템이 상태 체크 → loop abort
-  - `Job.status = cancelled` 최종 마킹
+  - `Job.status = cancelled` 최종 마킹 (**`JobStatus.cancelled` 신규 enum**, `failed`와 구분)
   - **이미 commit된 step은 롤백 안 함** (매 step commit이므로 부분 변경 유지)
   - `Job.payload.steps`에 마지막 step + `{aborted: true, reason: "user_cancelled"}` 기록
   - `log.md`에 `cancelled: job <id> at step <n>` 라인 추가
+- Note: cancel API는 Job 소유자(`created_by == current_user`) 또는 Admin만 호출 가능 (SC-17-a/b 권한 정책 유지). 이미 종료된 Job(`done/failed/cancelled`)에 cancel 호출 시 409 또는 idempotent 무시
 
 **SC-67** [Blocking] Progress checkpoint — `Job.payload.steps`
 - Given: Agentic loop 실행 중
 - When: 매 tool 호출 후
 - Then:
   - `Job.payload.steps` 배열에 항목 push:
-    - `{step_no, tool_name, args_summary, result_snippet, ts}`
+    - `{step_no: int, tool_name: str, args_snippet: str, result_snippet: str, ts: ISO8601, status: "ok"|"error"}`
+  - **args_snippet / result_snippet은 500자 truncate** (큰 content는 git log/wiki-store에서 풀 확인)
   - DB commit (매 step 후) — 도중 중단되어도 진행상황 보존
   - Jobs 탭 polling으로 step 목록 + 진행 상태 표시 가능
 
@@ -583,16 +587,22 @@
   - 매 호출 = 1 git commit (SC-78)
   - backlinks 자동 갱신 (SC-75) 한 commit에 묶음
 
-**SC-71** [Blocking] `patch_page` 동작 + old_string graceful skip
-- Given: Agentic loop 중 LLM이 `patch_page(path, edits)` 호출 (edits = `[{old_string, new_string}, ...]`)
+**SC-71** [Blocking] `patch_page` 동작 — Unified Diff 패턴
+- Given: Agentic loop 중 LLM이 `patch_page(path, diff)` 호출 (`diff`는 표준 **unified diff** 형식, 5-line context 권장)
 - When: tool 실행
 - Then:
-  - 기존 페이지 읽기 → 각 edit별로 `old_string`을 `new_string`으로 1회 치환
-  - **`old_string`이 본문에 없으면 해당 edit skip + 결과에 명시** (Claude Code Edit과 동일, FAILED 아님)
-  - 다중 일치 시 첫 1회만 적용 + 결과에 "multiple matches; first applied" 명시
-  - 적용된 edit이 0건이면 commit 안 함 + 결과 "no changes"
-  - 1건 이상 적용 시 commit (SC-78 패턴) + backlinks 자동 갱신
-  - 예약 파일/path traversal 거부
+  - 시스템이 기존 페이지를 읽고, diff의 각 hunk를 **context fuzzy match**로 적용 (line number는 무시, context line으로 위치 찾기)
+  - 결과 응답: `{"applied": bool, "hunks_applied": int, "hunks_failed": [{hunk_idx, reason, context_excerpt}], "error": str|null}`
+  - **각 hunk별로 독립 적용** — 한 hunk fail이 다른 hunk 적용을 막지 않음
+  - **hunks_applied == 0** → 파일 변경 없음, commit 안 함 (FAILED 아님; LLM이 결과 보고 재시도 가능)
+  - **hunks_applied >= 1** → 변경 적용 + 1 commit (SC-78 패턴) + backlinks 자동 갱신
+  - 적용 후 frontmatter `last_updated`는 시스템이 자동 갱신 (LLM이 diff에 포함 안 해도 됨)
+  - 예약 파일(`index.md`/`log.md`/`_sheska.yaml`/`_*`) / path traversal 거부 → `error="reserved file"` 또는 `"invalid path"`
+  - 새 페이지(파일 부재) 시 patch_page 거부 → LLM이 `write_page` 사용하도록 유도. `error="page not found; use write_page for new pages"`
+- Note:
+  - LLM은 diff format에 정확한 line number를 못 맞춰도 됨 — context line만 정확하면 위치 fuzzy match로 안전 적용
+  - hunk fail 발생 시 LLM은 `read_page`로 최신 상태 확인 후 새 diff로 재시도 가능 (loop 안전장치 SC-65에 의해 최대 시도 횟수 제한)
+  - 위키 본문은 짧은 줄 + 자연어가 많아 context 3줄로는 모자랄 수 있어 5줄 권장
 
 **SC-72** [Blocking] `delete_page` 동작 + 안전장치
 - Given: Agentic loop 중 LLM이 `delete_page(path, reason)` 호출
@@ -615,14 +625,17 @@
   - 정적 `Plan`/`PlanAction` Pydantic 폐기 — `Job.payload.steps` 누적이 plan 역할 대체
   - log.md/index.md 갱신 동작은 기존 SC-16-b/c 유지
 
-**SC-74** [Blocking] Provider 분기 — Ollama는 v0.3.1 단순 흐름 유지
-- Given: Ollama 계열 provider 환경
-- When: INGEST 또는 WIKI_COMMAND Job
+**SC-74** [Blocking] Provider 제한 — Anthropic only (v0.4)
+- Given: `.env`의 `LITELLM_PROVIDER`가 Anthropic이 아님 (e.g., `ollama`, `openai`, `gemini` 등)
+- When: INGEST 또는 WIKI_COMMAND Job 트리거
 - Then:
-  - **v0.3.1의 단순 chat + Plan 흐름 그대로 동작** (agentic loop 미적용)
-  - `/guide` 페이지에 "Agentic features require Anthropic provider" 안내
-  - Anthropic 외 provider에서 agentic 호출 시 자동 v0.3.1 흐름으로 fallback (FAILED 아님)
-  - v0.5+에서 OllamaNativeAdapter 도입 시 agentic 흐름 활성화 검토
+  - **즉시 Job FAILED** + `error_msg`에 명시: "This provider (<provider>) does not support agentic mode (v0.4). Use Anthropic, or downgrade to v0.3.1 for legacy provider support."
+  - `/guide` 페이지에 "v0.4 requires Anthropic provider" 안내 추가
+  - v0.3.1 단순 chat/Plan 흐름은 v0.4 코드베이스에서 **제거됨** (silent fallback 없음, Kirin 결정)
+- Note:
+  - v0.4 Anthropic-only 단순화 결정 (ADR-0013)
+  - Ollama/기타 provider는 v0.3.1 인스턴스로 운영하거나 v0.5+ OllamaNativeAdapter(B-21) 도입 대기
+  - Anthropic API 자체 오류(인증 실패 / rate limit 등)는 일반 LLM 호출 오류로 처리
 
 ### Backlink Index (3건)
 
@@ -677,7 +690,8 @@
 - Given: 진행 중 또는 완료된 Agentic Job (INGEST/WIKI_COMMAND)
 - When: Jobs 탭에서 해당 Job 항목 확인
 - Then:
-  - `Job.payload.steps` 배열 노출 (step_no / tool_name / args_summary / result_snippet / ts)
-  - 진행 중인 Job(`status=processing`)에 **Cancel 버튼** 노출 → 클릭 시 `status=cancelling`으로 PATCH
-  - 완료/실패/취소 Job은 Cancel 버튼 비활성 (또는 미노출)
+  - `Job.payload.steps` 배열 노출 (step_no / tool_name / args_snippet / result_snippet / ts / status)
+  - 진행 중인 Job(`status=processing`)에 **Cancel 버튼** 노출 → 클릭 시 **`POST /api/jobs/{id}/cancel`** 호출
+  - 완료/실패/취소 Job(`status ∈ {done, failed, cancelled}`)은 Cancel 버튼 비활성 (또는 미노출)
+  - 취소 후 Job 표시 상태가 자연스럽게 `cancelled` 라벨로 갱신 (polling)
   - SC-17-a/b 권한 회귀 (Member 본인 / Admin 전체)
