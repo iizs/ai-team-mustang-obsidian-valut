@@ -421,7 +421,8 @@
 - Given: **WIKI_COMMAND** Job의 Plan에 `action="delete"`, `target`이 일반 위키 페이지 (예약 파일 X), `reason` 포함
 - When: Phase B 디스패치
 - Then:
-  - `git rm <target>` 실행 + git commit ("delete: <target> [job:<id>]")
+  - target 파일이 git index와 working tree에서 제거됨 + git commit ("delete: <target> [job:<id>]")
+  - 구현 방식은 `git rm` 또는 `unlink + repo.index.remove(working_tree=True)` 모두 허용 (결과 동등). 실제 구현은 후자.
   - log.md에 `executed: delete → [[target]] (reason: <reason>)` 라인 추가
 - Note:
   - 삭제 후 다른 페이지의 `[[삭제된페이지]]` 링크는 SC-39 안내 페이지로 자연 노출 (Lint(B-6)가 사후 정리)
@@ -459,7 +460,7 @@
   - LLM이 Plan(JSON, INGEST 동일 스키마) 출력
   - Plan 액션을 순차 실행 (create/merge_into/supersede/delete 모두 SC-43/52/53/54 적용)
   - log.md/index.md 갱신 (SC-16-b/c 동일 동작)
-  - graceful degrade는 INGEST와 동일 (SC-45)
+  - **JSON 파싱 실패 시 즉시 Job FAILED + LLM 출력 snippet `error_msg` 보존**. legacy fallback 미적용 (INGEST와 다른 정책 — WIKI_COMMAND는 prompt를 우리가 통제하므로 legacy 형식 출현 가능성이 의미 없음)
 
 **SC-59** [Blocking] `WIKI_COMMAND` 빈 plan 처리
 - Given: LLM이 유효 JSON이지만 `actions=[]` (해석 실패 또는 변경 불필요로 판단)

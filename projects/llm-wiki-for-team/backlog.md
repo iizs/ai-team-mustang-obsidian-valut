@@ -158,6 +158,17 @@
 - v0.1: PDF/TXT/MD만
 - v0.2+: `python-docx` 도입 검토
 
+### B-21. Ollama LLM 호환성 우회 제거 경로
+
+- **배경**: v0.3 실사용에서 LiteLLM Ollama provider가 `response_format` / `format="json"` 어떤 JSON flag든 응답을 function call 구조로 해석 → `KeyError: 'arguments'` 발생 (`ollama.py:566`). 임시 조치로 **Ollama에서는 JSON 강제 자체를 미사용**, prompt 강제 + Pydantic + graceful degrade만으로 운영 중.
+- **현 상태**: 임시 우회. ADR-0011 §결정.8 운영 변경 흐름 명시.
+- **참조**: [reviews/2026-05-08-prompt-load-bug-postmortem.md](reviews/2026-05-08-prompt-load-bug-postmortem.md)
+- **제거 경로 후보**:
+  1. **LiteLLM 업그레이드** — Ollama provider line 566 버그 fix 확인 후 JSON flag 재도입 (가장 단순, 검증 비용 작음)
+  2. **Ollama API 직접 호출** — httpx로 `/api/chat` 직접 사용. LiteLLM 우회. Ollama-native `format: "json"` 정상 사용 가능
+  3. **OpenAI-compatible 서버 호스팅** — vLLM, Together 등 OpenAI-compatible 서버에 모델 호스팅. LiteLLM의 OpenAI 경로 사용. 운영 부담 ↑
+- **결정 기준**: 우선 1번 시도 (비용 작음). 안 되면 2번 (Ollama 종속이지만 우리 도메인에선 큰 비용 X). 3번은 최후 카드.
+
 ---
 
 ## 메타

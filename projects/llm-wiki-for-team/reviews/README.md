@@ -50,3 +50,11 @@ Discord에서 휘발될 리뷰 결과를 합의된 시점에 vault로 옮긴다.
 ## v0.2
 
 - [v0.2 통합 검증](2026-05-08-hawkeye-v0.2-validation.md) — Hawkeye, SC-20+SC-31~40 PASS, Advisory 1건, 사후 발견 1건(DB 마이그레이션)
+
+## v0.3 (Phase A) + Postmortem
+
+- [Prompt 로드 버그 + LiteLLM Ollama 호환성 Postmortem](2026-05-08-prompt-load-bug-postmortem.md) — Roy, v0.1부터 잠재된 silent prompt failure가 v0.3 실사용에서 드러남. v0.1~v0.2 회고의 "weak 모델 instruction following" 평가 무효화. B-21 백로그 신설 근거.
+
+## v0.3.1 (Phase B)
+
+- [v0.3.1 통합 검증](2026-05-09-hawkeye-v0.3.1-validation.md) — Hawkeye, SC-52~63 PASS, Advisory 2건 (SC-54/SC-58 표현 차이) → SC 본문 정리로 흡수

@@ -65,7 +65,12 @@ v0.1/v0.2 Ingest 파이프라인은 **원본 전체 → 단일 LLM 호출 → `=
     - 2순위: 기존 4단계 fallback (`=== FILE: ===` 마커 / `---\nyaml\n---` / dangling `---` / `# 제목`만) — `log.md`/Jobs 탭에 "JSON parse failed, used legacy fallback" 명시
     - 3순위: 모두 실패 → Job FAILED + LLM 출력 snippet 보존
 7. **모델 1 채택 (단일 호출에 풀 콘텐츠 포함)**
-8. **JSON 강제 메커니즘**: LiteLLM `response_format={"type":"json_object"}` 통일 (Anthropic/Ollama 공통). Provider별 분기 없음. graceful degrade가 안전망. — *(Kirin 결정 2026-05-08)*
+8. **JSON 강제 메커니즘**: ⚠️ 운영 변경 흐름 (2026-05-08 실측 결과로 정착):
+    - **(원안)** LiteLLM `response_format={"type":"json_object"}` 통일 — *(Kirin 결정 2026-05-08)*
+    - **(1차 변경)** Anthropic 정상, Ollama provider에서 `KeyError: 'arguments'` 발생 → Ollama만 `format="json"` 분기 시도
+    - **(2차 변경, 현 운영)** Ollama provider가 `format="json"`에서도 동일한 응답 파싱 경로(line 566)에서 KeyError → **Ollama는 JSON 강제 자체 미사용**으로 결정. prompt 강제 + Pydantic + graceful degrade에 의존.
+    - Anthropic/OpenAI 등: `response_format={"type":"json_object"}` 그대로 사용 (현 운영)
+    - 이 우회는 **임시 조치**. LiteLLM 업그레이드 또는 Ollama API 직접 호출로 우회 제거 필요 — [백로그 B-21](../backlog.md#b-21-ollama-llm-호환성-우회-제거-경로) 참조.
 9. **`create` 충돌 정책**: `create` 액션의 `page_path`가 기존 페이지명과 충돌 시 **자동으로 `merge_into` 액션으로 강등**. Phase A에서는 어차피 skip + log 명시되므로 데이터 손실 없음. — *(Kirin 결정 2026-05-08)*
 10. **Plan 안전장치**:
     - Path traversal 거부 (page_path는 kebab-case 슬러그만 허용)
