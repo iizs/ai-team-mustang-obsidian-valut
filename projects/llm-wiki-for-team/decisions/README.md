@@ -51,4 +51,7 @@ A안 / B안 / C안 비교.
 | [0009](0009-edit-single-page.md) | Edit Flow: 단일 페이지 컨텍스트 | Accepted |
 | [0010](0010-log-md-no-request-text.md) | log.md 기록 범위: 요청 전문 미포함 | Accepted |
 | [0011](0011-staged-llm-pipeline.md) | Ingest 파이프라인 다단계화 (Phase A) | Accepted |
-| [0012](0012-phase-b-actions-and-wiki-command.md) | Phase B: Plan 액션 실행 + Wiki Command + Page Delete | Proposed |
+| [0012](0012-phase-b-actions-and-wiki-command.md) | Phase B: Plan 액션 실행 + Wiki Command + Page Delete | Accepted |
+| [0013](0013-agentic-loop-provider-adapter.md) | Agentic Loop + Provider Adapter 전환 전략 | Proposed |
+| [0014](0014-tool-catalog-and-commit-log.md) | Agentic Tool 카탈로그 + Commit/Log 정책 | Proposed |
+| [0015](0015-backlink-frontmatter-index.md) | Backlink Frontmatter Index | Proposed |

@@ -28,7 +28,7 @@
   - [v0.2](iterations/v0.2.md) — 사용성·접근성 (완료)
   - [v0.3](iterations/v0.3.md) — LLM 파이프라인 다단계화 Phase A + 환경 초기화 (완료)
   - [v0.3.1](iterations/v0.3.1.md) — Phase B: Plan 액션 실행 + Wiki Command (완료)
-  - v0.4 — Agentic 재설계 (Planning, Kirin 화두 제기)
+  - [v0.4](iterations/v0.4.md) — Agentic Wiki Operations + Backlink Index (Planning)
 - [Backlog](backlog.md) — 정렬되지 않은 아이디어 풀
 - [reviews/](reviews/) — Breda/Hawkeye 리뷰 영구 보관
 
