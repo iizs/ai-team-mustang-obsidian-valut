@@ -1,8 +1,8 @@
 # ADR-0014 — Agentic Tool 카탈로그 + Commit/Log 정책
 
-- **상태**: Proposed (v0.4 킥오프 검토 중)
-- **결정일**: 2026-05-14 (예정)
-- **결정자**: Kirin, Roy
+- **상태**: Accepted (v0.4 킥오프 — 2026-05-14)
+- **결정일**: 2026-05-14
+- **결정자**: Kirin, Roy (+ Breda/Hawkeye 합동 검토)
 
 ## 컨텍스트
 
@@ -19,14 +19,14 @@
 | `read_source(filename)` | `filename: str` | 원본 텍스트 (PDF 추출 포함) | INGEST 흐름에서만 의미. 다른 흐름에서도 호출 가능하지만 보통 미사용 |
 | `search_pages(query)` | `query: str` | 매칭 페이지 목록 + 매칭 라인 snippet | 자유 호출. 기본 구현은 ripgrep 또는 단순 grep |
 | `write_page(path, content)` | `path: str`, `content: str` (full markdown + frontmatter) | 성공 여부 | 신규 작성 또는 전체 덮어쓰기용. 예약 파일 거부 |
-| `patch_page(path, edits)` | `path: str`, `edits: [{old_string, new_string}]` | 성공 여부 + 적용된 edit 수 | **기존 페이지 부분 수정용** (full content 재생성 회피 → 토큰 절약). Claude Code Edit과 동일 패턴 |
+| `patch_page(path, diff)` | `path: str`, `diff: str` (unified diff format) | `{applied, hunks_applied, hunks_failed, error}` | **기존 페이지 부분 수정용** (full content 재생성 회피 → 출력 토큰 절약). LLM이 unified diff 생성 → 시스템이 context 기반으로 적용. **Kirin 결정 2026-05-14** |
 | `delete_page(path, reason)` | `path: str`, `reason: str` | 성공 여부 | WIKI_COMMAND/Lint 흐름만 허용. INGEST 흐름에선 거부 (축적 원칙). 예약 파일 거부 |
 | `get_backlinks(page)` | `page: str` | 백링크 페이지 리스트 | [ADR-0015](0015-backlink-frontmatter-index.md)의 frontmatter 인덱스 조회 |
 
 #### 안전장치 (시스템이 강제)
 - `write_page`/`patch_page`/`delete_page`는 예약 파일(`index.md`/`log.md`/`_sheska.yaml`/`_`로 시작) 거부
 - `delete_page`는 INGEST job_type에서 호출 시 거부 (SC-63 정신 유지)
-- `patch_page`의 `old_string`이 본문에 존재하지 않으면 해당 edit skip + 결과에 명시 (Claude Code Edit과 동일)
+- `patch_page` context mismatch (hunk fail) 시 — 결과에 `hunks_failed` 명시 + `error` 메시지에 mismatch된 line 정보. LLM이 read_page 재실행 후 재시도 가능 (max 3 retry). 모든 hunk 실패 시 no commit.
 - `path`는 항상 kebab-case slug + `.md`. path traversal 거부
 
 ### `search_pages` v0.4 도입 결정 (Kirin 보강)
@@ -35,12 +35,26 @@
 - LLM이 `get_index` + `read_page`만 쓰는 것보다 검색 가능하면 의도 적중도 ↑
 - 단순 구현: `ripgrep` 또는 Python `re` 기반 grep, frontmatter+body 모두 매칭
 
-### `write_page` vs `patch_page` 분리 (Kirin 보강)
+### `write_page` vs `patch_page` 분리 + diff 형식 (Kirin 결정 2026-05-14)
 
 - 신규 페이지 작성: `write_page` (full content 필요)
-- 기존 페이지 수정: `patch_page` (diff/edits만) — **권장**
-- LLM이 두 tool을 적절히 선택. 시스템은 `patch_page` 호출 시 토큰 절약 + 의도 명확.
-- 이유: 매 수정마다 full content 재생성 시 LLM 비용 폭발 + 의도 잃기 쉬움. Claude Code의 Edit tool이 같은 사상.
+- 기존 페이지 수정: `patch_page` — **unified diff format**
+- LLM이 두 tool 중 적절히 선택. `agent_system.txt`에 "신규는 write, 수정은 patch" 가이드 명시.
+
+**patch_page 형식 — POSIX/git 표준 unified diff:**
+- `difflib.unified_diff` 호환
+- 시스템은 **context 기반 fuzzy match로 적용** (LLM이 line number 부정확해도 안전)
+- Context line 길이: **5줄** 권장 (위키 짧은 줄/자연어에서 3줄로 충돌 가능성)
+- 라이브러리: Python `unidiff` 또는 `patch-ng` 검토 (Breda 선택)
+
+**왜 unified diff (search-replace 대비):**
+- 출력 토큰 절약 (변경 hunk + 짧은 context만)
+- POSIX/git 표준이라 디버깅/도구 호환
+- 위키 markdown 본문(자연어 줄 단위)에 자연스러움
+- Claude가 unified diff 생성 능력 충분 (Anthropic-only 결정 하에 더 안전)
+
+**`last_updated` frontmatter 갱신:**
+- LLM이 diff에 포함 안 해도 됨. **시스템이 매 write/patch 후 자동 갱신** (LLM 부담 ↓)
 
 ### Commit 단위
 

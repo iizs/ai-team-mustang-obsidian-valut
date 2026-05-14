@@ -507,3 +507,177 @@
   - 같은 plan의 다른 액션(create/merge_into/supersede)은 정상 처리 — 전체 Job FAILED 아님
   - plan_summary에 outcome `rejected_forbidden_in_ingest`로 보존 (Jobs 탭 가시성)
 - Note: Kirin 결정 — INGEST는 축적 원칙(LLM은 축적, 삭제는 사용자 명시 명령), delete는 WIKI_COMMAND에서만 허용. Plan validator 또는 dispatcher 단계에서 차단.
+
+## v0.4 — Agentic Wiki Operations + Backlink Index
+
+> ADR-0013 / ADR-0014 / ADR-0015에 따른 검증 기준. 정적 Plan 모델에서 agentic loop로 전환, Anthropic 우선, Ollama는 v0.3.1 흐름 유지.
+
+### Agentic Loop 기본
+
+**SC-64** [Blocking] Agentic loop 기본 동작 + 자연 종료
+- Given: Anthropic provider 환경, 사용자가 INGEST 또는 WIKI_COMMAND 트리거
+- When: `run_agentic_loop()` 실행
+- Then:
+  - LLM에 system prompt(`prompts/agent_system.txt`) + user request + tool 카탈로그 전달
+  - LLM이 tool 호출 → 시스템이 dispatch → 결과를 `tool_result` 메시지로 다시 LLM에 전달
+  - LLM이 tool 호출 없는 응답을 반환하면 **자연 종료** → Job SUCCESS
+  - 한 번이라도 tool 호출 발생하면 모든 step이 `Job.payload.steps`에 기록됨
+
+**SC-65** [Blocking] Loop 안전장치 4종
+- Given: Agentic loop 실행 중
+- When: 다음 조건 중 하나가 트리거됨
+- Then:
+  - **`max_iterations` 초과** (기본 20회): loop abort + Job FAILED + `error_msg`에 "max_iterations reached"
+  - **`max_tool_calls` 초과** (기본 50회): 동일
+  - **`timeout` 초과** (기본 5분): 동일
+  - **이상 패턴 감지** — 같은 tool + 동일 인자가 연속 3회 호출되면 abort + Job FAILED + `error_msg`에 "stuck pattern detected: <tool>(<args>)"
+- 임계값은 `.env`로 조정 가능 (선택)
+
+**SC-66** [Blocking] 사용자 취소 (graceful abort)
+- Given: Agentic loop 진행 중인 Job, 사용자가 UI 또는 API에서 취소 요청
+- When: `Job.status = cancelling`으로 설정됨
+- Then:
+  - 다음 iteration 진입 전 시스템이 상태 체크 → loop abort
+  - `Job.status = cancelled` 최종 마킹
+  - **이미 commit된 step은 롤백 안 함** (매 step commit이므로 부분 변경 유지)
+  - `Job.payload.steps`에 마지막 step + `{aborted: true, reason: "user_cancelled"}` 기록
+  - `log.md`에 `cancelled: job <id> at step <n>` 라인 추가
+
+**SC-67** [Blocking] Progress checkpoint — `Job.payload.steps`
+- Given: Agentic loop 실행 중
+- When: 매 tool 호출 후
+- Then:
+  - `Job.payload.steps` 배열에 항목 push:
+    - `{step_no, tool_name, args_summary, result_snippet, ts}`
+  - DB commit (매 step 후) — 도중 중단되어도 진행상황 보존
+  - Jobs 탭 polling으로 step 목록 + 진행 상태 표시 가능
+
+### Tool 카탈로그 (5건)
+
+**SC-68** [Blocking] Read 계열 tool 동작 (read-only, 자유 호출)
+- Given: Agentic loop 중 LLM이 read-only tool 호출
+- When: 다음 tool 중 하나가 호출됨
+- Then:
+  - **`get_index()`** — `wiki-store/index.md` 내용 + 표제어/한줄요약 표 반환
+  - **`read_page(path)`** — frontmatter dict + body str 반환. 페이지 부재 시 `null`
+  - **`read_source(filename)`** — Source Store에서 원본 텍스트 추출 (.pdf는 pypdf로 추출). 부재 시 명시 오류
+  - **`search_pages(query)`** — 매칭 페이지 목록 + 매칭 라인 snippet (frontmatter+body 모두 매칭)
+  - 모두 부작용 없음 (파일 변경 X, commit X). Job.payload.steps에 기록만.
+
+**SC-69** [Blocking] `get_backlinks(page)` tool 동작
+- Given: Agentic loop 중 LLM이 `get_backlinks(page)` 호출
+- When: tool 실행
+- Then:
+  - target 페이지의 frontmatter `backlinks` 필드 조회 (없으면 빈 리스트)
+  - 페이지 부재 시 명시 오류 (null이 아닌 error 응답으로 LLM이 인지)
+  - ADR-0015 자동 갱신 결과가 정확히 반영됨
+
+**SC-70** [Blocking] `write_page` 동작 + 안전장치
+- Given: Agentic loop 중 LLM이 `write_page(path, content)` 호출
+- When: tool 실행
+- Then:
+  - 신규 또는 전체 덮어쓰기로 `wiki-store/<path>` 저장
+  - **예약 파일(`index.md`/`log.md`/`_sheska.yaml`/`_`로 시작) 거부** + tool 결과에 명시
+  - path traversal 거부 (`../`/절대경로/non-kebab-case + `.md` 외 확장자)
+  - `content`의 frontmatter `type` enum 위반 시 SC-51처럼 `reference`로 보정
+  - 매 호출 = 1 git commit (SC-78)
+  - backlinks 자동 갱신 (SC-75) 한 commit에 묶음
+
+**SC-71** [Blocking] `patch_page` 동작 + old_string graceful skip
+- Given: Agentic loop 중 LLM이 `patch_page(path, edits)` 호출 (edits = `[{old_string, new_string}, ...]`)
+- When: tool 실행
+- Then:
+  - 기존 페이지 읽기 → 각 edit별로 `old_string`을 `new_string`으로 1회 치환
+  - **`old_string`이 본문에 없으면 해당 edit skip + 결과에 명시** (Claude Code Edit과 동일, FAILED 아님)
+  - 다중 일치 시 첫 1회만 적용 + 결과에 "multiple matches; first applied" 명시
+  - 적용된 edit이 0건이면 commit 안 함 + 결과 "no changes"
+  - 1건 이상 적용 시 commit (SC-78 패턴) + backlinks 자동 갱신
+  - 예약 파일/path traversal 거부
+
+**SC-72** [Blocking] `delete_page` 동작 + 안전장치
+- Given: Agentic loop 중 LLM이 `delete_page(path, reason)` 호출
+- When: tool 실행
+- Then:
+  - 일반 위키 페이지 삭제 (git에서 제거) + commit
+  - **예약 파일 거부** (SC-56 패턴 유지)
+  - **INGEST job 컨텍스트에서는 거부** (SC-63 정신 유지) + 결과에 "forbidden in INGEST"
+  - target 부재 시 skip + 결과 "page not found"
+  - 삭제 후 backlinks 정리 자동 (SC-77)
+
+### Workflow 통합 / Provider 분기 (2건)
+
+**SC-73** [Blocking] INGEST + WIKI_COMMAND 통합 agentic 흐름 (Anthropic)
+- Given: Anthropic provider 환경, INGEST 또는 WIKI_COMMAND Job
+- When: 워커가 픽업
+- Then:
+  - 둘 다 동일 `run_agentic_loop()` 호출 (내부 흐름 동일)
+  - INGEST Job은 user request에 `source_filename` + 원본 텍스트 hint 포함, WIKI_COMMAND는 `command_text`만
+  - 정적 `Plan`/`PlanAction` Pydantic 폐기 — `Job.payload.steps` 누적이 plan 역할 대체
+  - log.md/index.md 갱신 동작은 기존 SC-16-b/c 유지
+
+**SC-74** [Blocking] Provider 분기 — Ollama는 v0.3.1 단순 흐름 유지
+- Given: Ollama 계열 provider 환경
+- When: INGEST 또는 WIKI_COMMAND Job
+- Then:
+  - **v0.3.1의 단순 chat + Plan 흐름 그대로 동작** (agentic loop 미적용)
+  - `/guide` 페이지에 "Agentic features require Anthropic provider" 안내
+  - Anthropic 외 provider에서 agentic 호출 시 자동 v0.3.1 흐름으로 fallback (FAILED 아님)
+  - v0.5+에서 OllamaNativeAdapter 도입 시 agentic 흐름 활성화 검토
+
+### Backlink Index (3건)
+
+**SC-75** [Blocking] Backlink frontmatter 자동 갱신
+- Given: `write_page`/`patch_page`/`delete_page` tool 실행 완료
+- When: 시스템 hook이 변경된 페이지의 outgoing 링크 분석
+- Then:
+  - 변경된 페이지의 body에서 `[[X]]` 패턴 추출 (outgoing)
+  - 이전 outgoing과 비교해 추가/삭제 식별
+  - 추가된 X: X 페이지의 frontmatter `backlinks`에 현재 페이지 stem 추가 (set union, 중복 제거)
+  - 삭제된 X: X 페이지의 frontmatter `backlinks`에서 현재 페이지 stem 제거
+  - 모든 backlinks 갱신은 같은 tool 호출의 commit에 묶여 atomic 처리
+  - LLM은 갱신에 관여하지 않음 (시스템 자동, 결정적)
+
+**SC-76** [Blocking] Backlink 마이그레이션 (`init_backlinks.py`)
+- Given: 기존 위키에 `backlinks` 필드가 없는 페이지들이 존재
+- When: `python scripts/init_backlinks.py` 실행 또는 `init_env.py --reset` 후 자동 트리거
+- Then:
+  - 모든 위키 페이지의 body에서 `[[X]]` 추출 → 역색인 구축
+  - 각 페이지의 frontmatter에 `backlinks: [...]` 작성 (기존 필드 보존)
+  - 단일 commit으로 모든 변경 묶기 (`migrate: backlinks index initial build`)
+  - 멱등성 — 다시 실행해도 결과 동일
+
+**SC-77** [Blocking] 페이지 삭제 시 backlinks 자동 정리
+- Given: 페이지 P가 `delete_page`로 삭제됨
+- When: 시스템 hook 실행
+- Then:
+  - P가 frontmatter.backlinks에 등록된 모든 페이지에서 P stem 제거
+  - **본문의 `[[P]]` 링크 자체는 보존** (Lint v0.5+가 정리, SC-39 안내로 자연 노출)
+  - 정리는 같은 commit에 묶임
+
+### Commit / UI (3건)
+
+**SC-78** [Blocking] Write tool 호출당 1 commit + message 패턴
+- Given: `write_page`/`patch_page`/`delete_page` tool 실행 + 실제 변경 발생
+- When: 시스템이 git commit
+- Then:
+  - 매 호출당 1 commit (v0.4 정책; 1 액션 = 1 commit는 v0.5+)
+  - commit message: `[job:<id> step:<n>] <tool>: <path>` (예: `[job:abc123 step:3] patch_page: payment.md`)
+  - 같은 commit에 backlinks 갱신 변경분도 포함 (atomic)
+  - `log.md`에는 job 단위 요약만 기록 (시작/종료/요약, 매 step 기록 X)
+
+**SC-79** [Blocking] Frontend — Properties 표 backlinks 클릭 가능
+- Given: 위키 페이지 조회 시 frontmatter에 `backlinks: [페이지A, 페이지B]`
+- When: Page Properties 영역 펼침
+- Then:
+  - backlinks 값이 클릭 가능한 wikilink로 렌더 (`/wiki/<stem>`)
+  - 빈 리스트는 `—`로 표시 (SC-33 정책)
+  - 클릭 시 해당 페이지로 이동 (SC-20)
+
+**SC-80** [Blocking] Frontend — Jobs 탭 진행 표시 + 취소
+- Given: 진행 중 또는 완료된 Agentic Job (INGEST/WIKI_COMMAND)
+- When: Jobs 탭에서 해당 Job 항목 확인
+- Then:
+  - `Job.payload.steps` 배열 노출 (step_no / tool_name / args_summary / result_snippet / ts)
+  - 진행 중인 Job(`status=processing`)에 **Cancel 버튼** 노출 → 클릭 시 `status=cancelling`으로 PATCH
+  - 완료/실패/취소 Job은 Cancel 버튼 비활성 (또는 미노출)
+  - SC-17-a/b 권한 회귀 (Member 본인 / Admin 전체)

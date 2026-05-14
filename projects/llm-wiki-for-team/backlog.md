@@ -169,6 +169,16 @@
   3. **OpenAI-compatible 서버 호스팅** — vLLM, Together 등 OpenAI-compatible 서버에 모델 호스팅. LiteLLM의 OpenAI 경로 사용. 운영 부담 ↑
 - **결정 기준**: 우선 1번 시도 (비용 작음). 안 되면 2번 (Ollama 종속이지만 우리 도메인에선 큰 비용 X). 3번은 최후 카드.
 
+### B-22. LLM 비용 telemetry
+
+- **배경**: v0.4 agentic loop는 단일 명령에 수십 LLM 호출 가능. token 사용량/비용 추적 부재 시 운영 비용 폭발 위험을 사용자가 인지 못 함.
+- **방향**:
+  - 매 LLM 호출 후 `usage` (input/output tokens) 수집 → `Job.payload`에 누적
+  - Jobs 탭에 job 단위 token 사용량 + 추정 비용 표시 (model별 단가 테이블)
+  - 누적 통계 대시보드 (선택적, v0.5+)
+- **참고**: Anthropic API 응답에 `usage` 필드 포함. 단가는 model별 다름.
+- **확장**: 다른 provider도 동일 패턴 (OpenAI usage 등)
+
 ---
 
 ## 메타

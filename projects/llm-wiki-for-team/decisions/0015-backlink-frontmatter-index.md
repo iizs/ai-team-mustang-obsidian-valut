@@ -1,8 +1,8 @@
 # ADR-0015 — Backlink Frontmatter Index
 
-- **상태**: Proposed (v0.4 킥오프 검토 중)
-- **결정일**: 2026-05-14 (예정)
-- **결정자**: Kirin, Roy
+- **상태**: Accepted (v0.4 킥오프 — 2026-05-14)
+- **결정일**: 2026-05-14
+- **결정자**: Kirin, Roy (+ Breda/Hawkeye 합동 검토)
 
 ## 컨텍스트
 

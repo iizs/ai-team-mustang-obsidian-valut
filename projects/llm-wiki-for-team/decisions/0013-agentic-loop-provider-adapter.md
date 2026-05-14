@@ -1,7 +1,7 @@
 # ADR-0013 — Agentic Loop + Provider Adapter 전환 전략
 
-- **상태**: Proposed (v0.4 킥오프 검토 중)
-- **결정일**: 2026-05-14 (예정)
+- **상태**: Accepted (v0.4 킥오프 — 2026-05-14)
+- **결정일**: 2026-05-14
 - **결정자**: Kirin, Roy (+ Breda/Hawkeye 합동 검토)
 
 ## 컨텍스트
@@ -42,11 +42,13 @@ v0.3.1까지 만든 Plan 모델은 "LLM에 한 번 보내고 한 번에 받은 p
 
 단, **Claude Agent SDK는 채택하지 않고 Anthropic SDK 직접 사용 + agentic loop 직접 구현**. Agent SDK lock-in을 처음부터 피하고 D로의 refactor를 용이하게 함.
 
-### v0.4 범위
+### v0.4 범위 (Anthropic-only, Kirin 결정 2026-05-14)
 - `anthropic` 패키지 직접 사용 (Messages API + tool use)
 - Agentic loop 직접 작성 (`call → tool_calls 처리 → 결과 append → 반복`)
-- Ollama / 기타 provider는 **v0.4 동안 LiteLLM 경유의 기존 단순 chat 흐름(v0.3.1)으로 동작 유지** (agentic 모드는 Anthropic 권장 가이드)
+- **Anthropic 외 provider 호출 시 Job FAILED + 명시 에러** ("This provider does not support agentic mode (v0.4). Use Anthropic."). v0.3.1의 LiteLLM 단순 chat 흐름은 v0.4 코드베이스에서 **제거**.
 - `pipeline.py`/`llm_client.py`는 *나중에* Adapter 인터페이스를 추출할 수 있도록 응집도 높게 작성. 단 v0.4에 추상화 인터페이스 도입은 안 함.
+
+> **Kirin 결정 근거**: v0.4는 agentic 흐름의 가치 검증이 핵심. fallback 코드 유지는 dual-path 부담만 추가하고, Ollama 사용자는 v0.3.1 인스턴스를 유지하는 편이 깨끗함. v0.5+에서 OllamaNativeAdapter 도입 시 진짜 multi-provider 복귀.
 
 ### v0.5+ 범위 (D로 refactor)
 - `LLMAdapter` 인터페이스 추출
@@ -58,18 +60,23 @@ v0.3.1까지 만든 Plan 모델은 "LLM에 한 번 보내고 한 번에 받은 p
 
 - **B 시작은 학습 효과**: agentic 패턴은 처음 만들 때 인터페이스를 잘못 잡기 쉬움. Anthropic 단일 케이스로 구현하면서 발견한 abstraction을 v0.5에서 D로 정착시키는 게 안전.
 - **Claude Agent SDK 회피 이유**: SDK가 제공하는 풀스택(Bash/Read/Edit 일반 도구, MCP, hooks 등)은 우리 도메인에 거의 무용 + v0.5 refactor 시 의존성 제거 비용 큼.
-- **v0.4 동안 Ollama는 v0.3.1 흐름 유지**: 사용자(Kirin 포함) 운영 연속성 보장. Ollama 사용자는 "agentic 모드는 Anthropic 권장" 가이드 명시.
+- **v0.4 Anthropic-only**: fallback 코드 유지의 dual-path 부담을 피하고 agentic 흐름 가치 검증에 집중. Ollama 사용자는 v0.3.1 인스턴스를 유지. v0.5+에서 진짜 multi-provider 복귀.
 
 ## 추가 결정 (셋이 합의 + Kirin 확정)
 
-### Loop 종료 / 안전장치
-- 자연 종료: LLM이 tool 호출 안 함
+### Loop 종료 / 안전장치 (확정 임계값 — Kirin 결정 2026-05-14)
+- 자연 종료: LLM이 tool 호출 안 함 (`stop_reason == "end_turn"`)
 - 강제 종료:
-  - `max_iterations` (예: 20)
-  - `max_tool_calls` (예: 50)
-  - `timeout` (예: 5분)
-- 사용자 취소: Job.status = `cancelling` → 다음 iteration 진입 전 abort
-- **이상 패턴 감지**: 같은 tool + 같은 인자 연속 3회 호출 시 abort (무한 루프 방지)
+  - `max_iterations = 20`
+  - `max_tool_calls = 50`
+  - `timeout = 300s` (5분)
+  - `stop_reason == "max_tokens"` → abort + Job FAILED (context limit)
+- 사용자 취소: `POST /api/jobs/{id}/cancel` → Job.status = `cancelling` → 다음 iteration 진입 전 graceful abort → `cancelled`
+- **이상 패턴 감지**: 같은 (tool_name, args hash) 연속 3회 호출 시 abort (무한 루프 방지)
+- **parallel tool_use**: Anthropic은 동시 호출 가능하지만 v0.4에선 **순차 처리**로 단순화 (race 회피)
+
+### Job 모델 확장
+- **`JobStatus.cancelled` 신규** — `failed`와 구분. `cancelling`은 진행 중 마킹용 (DB에는 즉시 반영 → 다음 iteration 진입 시 reader가 보고 abort)
 
 ### INGEST + WIKI_COMMAND 통합
 - 내부적으로는 모두 동일한 agentic loop ("wiki command"). UI/UX 측면에서 INGEST 진입점(파일 업로드)은 분리 유지.
