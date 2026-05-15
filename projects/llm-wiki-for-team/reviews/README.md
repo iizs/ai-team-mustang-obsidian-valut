@@ -58,3 +58,8 @@ Discord에서 휘발될 리뷰 결과를 합의된 시점에 vault로 옮긴다.
 ## v0.3.1 (Phase B)
 
 - [v0.3.1 통합 검증](2026-05-09-hawkeye-v0.3.1-validation.md) — Hawkeye, SC-52~63 PASS, Advisory 2건 (SC-54/SC-58 표현 차이) → SC 본문 정리로 흡수
+
+## v0.4 (Agentic + Backlinks)
+
+- [v0.4 통합 검증 + 핫픽스 시리즈](2026-05-14-hawkeye-v0.4-validation.md) — Hawkeye, SC-64~80 PASS (1차 SC-71/78 Blocking → 2차 PASS), 후속 핫픽스 7건 모두 회귀 영향 없이 흡수
+- [v0.4 실사용 피드백 (Kirin)](2026-05-15-v0.4-empirical-feedback.md) — INGEST 큰 source 처리 + WIKI_COMMAND 시나리오 1~5 실측, prompt caching/tier limit/rename backlinks 등 발견 + ADR-0016 도출
