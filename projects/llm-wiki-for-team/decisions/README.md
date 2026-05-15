@@ -55,3 +55,4 @@ A안 / B안 / C안 비교.
 | [0013](0013-agentic-loop-provider-adapter.md) | Agentic Loop + Provider Adapter 전환 전략 | Accepted |
 | [0014](0014-tool-catalog-and-commit-log.md) | Agentic Tool 카탈로그 + Commit/Log 정책 | Accepted |
 | [0015](0015-backlink-frontmatter-index.md) | Backlink Frontmatter Index | Accepted |
+| [0016](0016-index-trust-lint-repair.md) | Index-Trust + Lint-Repair Pattern | Accepted |

@@ -90,9 +90,15 @@
 
 ### B-6. Lint 도입 ([ADR-0005](decisions/0005-lint-deferred.md) 해소)
 
-- 위키 health-check, 스테일/모순 페이지 정리
-- Job Queue에 LINT 타입 추가 가능성
-- 범위: 전체 vs 변경분 vs 선택 페이지 — 비용 대비 가치 검토 필수
+- **운영 원칙**: [ADR-0016 Index-Trust + Lint-Repair](decisions/0016-index-trust-lint-repair.md) — Tools는 인덱스 신뢰로 빠르게, Lint는 O(N) 비싼 정리 담당
+- **책임 (구체화 — 2026-05-15 Kirin 회고)**:
+  - Stale/모순 페이지 정리 (기존)
+  - **Backlinks 인덱스 재구축 / 부정합 회복** — `rename_page`/`write_page` 등 자동 갱신에서 누락된 케이스 정리
+  - **Dangling `[[link]]` 발견/리포트** — 삭제된 페이지를 가리키는 본문 링크를 사용자에게 알림
+  - **Frontmatter 누락 보강** — 필수 필드 부재 시 기본값 채우기
+- **트리거**: Job Queue에 LINT 타입 추가, 사용자 명시 실행 또는 스케줄
+- **범위**: 전체 vs 변경분 vs 선택 페이지 — 비용 대비 가치 검토 필수
+- **참조**: `init_backlinks.py --rebuild-backlinks` (현 응급 도구, Lint의 부분 기능)
 
 ### B-7. 원본 soft-delete (SC-9)
 
