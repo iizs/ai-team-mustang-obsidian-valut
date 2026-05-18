@@ -56,3 +56,5 @@ A안 / B안 / C안 비교.
 | [0014](0014-tool-catalog-and-commit-log.md) | Agentic Tool 카탈로그 + Commit/Log 정책 | Accepted |
 | [0015](0015-backlink-frontmatter-index.md) | Backlink Frontmatter Index | Accepted |
 | [0016](0016-index-trust-lint-repair.md) | Index-Trust + Lint-Repair Pattern | Accepted |
+| [0017](0017-lint-tier-model.md) | Lint Tier Model | Accepted |
+| [0018](0018-lint-finding-tracker.md) | Lint Finding Tracker | Accepted |
