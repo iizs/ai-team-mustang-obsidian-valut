@@ -29,7 +29,7 @@
   - [v0.3](iterations/v0.3.md) — LLM 파이프라인 다단계화 Phase A + 환경 초기화 (완료)
   - [v0.3.1](iterations/v0.3.1.md) — Phase B: Plan 액션 실행 + Wiki Command (완료)
   - [v0.4](iterations/v0.4.md) — Agentic Wiki Operations + Backlink Index (완료)
-  - [v0.5](iterations/v0.5.md) — Lint Issue Tracking System (Planning)
+  - [v0.5](iterations/v0.5.md) — Lint Issue Tracking System (완료)
 - [Backlog](backlog.md) — 정렬되지 않은 아이디어 풀
 - [reviews/](reviews/) — Breda/Hawkeye 리뷰 영구 보관
 

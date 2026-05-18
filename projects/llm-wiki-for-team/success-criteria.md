@@ -702,7 +702,7 @@
 
 **SC-81** [Blocking] 사용자 신고 (POST `/api/lint/findings`) — 권한 + 자동 채움
 - Given: 인증된 사용자(Member 또는 Admin)
-- When: `POST /api/lint/findings` 본문 `{page_path: str, description: str, category?: str}`
+- When: `POST /api/lint/findings` 본문 `{page_path?: str, description: str, category?: str}`
 - Then:
   - 신규 finding 생성 + 201 응답
   - 자동 채움 필드:
@@ -711,7 +711,8 @@
     - `reported_by = current_user.email`
     - `category = user_reported` (지정 안 했을 때 default)
     - `created_at = now`
-  - `page_path`/`description` 필수 — 누락 또는 빈 문자열 시 422
+  - `description` 필수 — 누락 또는 빈 문자열 시 422
+  - `page_path`는 **optional** (ADR-0018 데이터 모델 정합 — 위키 전체 통계 finding 등 페이지 비종속 케이스 수용). 사용자 신고 UI에서는 항상 현재 page_path를 첨부하지만 API 차원에서는 nullable.
   - 비인증 호출은 401
 
 **SC-82** [Blocking] 목록 조회 (GET `/api/lint/findings`)
