@@ -695,3 +695,87 @@
   - 완료/실패/취소 Job(`status ∈ {done, failed, cancelled}`)은 Cancel 버튼 비활성 (또는 미노출)
   - 취소 후 Job 표시 상태가 자연스럽게 `cancelled` 라벨로 갱신 (polling)
   - SC-17-a/b 권한 회귀 (Member 본인 / Admin 전체)
+
+## v0.5 — Lint Issue Tracking System
+
+> ADR-0017 (Lint Tier Model) + ADR-0018 (Lint Finding Tracker)에 따른 검증 기준. v0.5는 **인프라만** — scanner/agent 없음, 사용자 신고가 유일한 active source.
+
+**SC-81** [Blocking] 사용자 신고 (POST `/api/lint/findings`) — 권한 + 자동 채움
+- Given: 인증된 사용자(Member 또는 Admin)
+- When: `POST /api/lint/findings` 본문 `{page_path: str, description: str, category?: str}`
+- Then:
+  - 신규 finding 생성 + 201 응답
+  - 자동 채움 필드:
+    - `source = "user:web"` (강제 — 클라이언트 입력 무시)
+    - `status = "open"` (default)
+    - `reported_by = current_user.email`
+    - `category = user_reported` (지정 안 했을 때 default)
+    - `created_at = now`
+  - `page_path`/`description` 필수 — 누락 또는 빈 문자열 시 422
+  - 비인증 호출은 401
+
+**SC-82** [Blocking] 목록 조회 (GET `/api/lint/findings`)
+- Given: 인증된 사용자 (Member/Admin)
+- When: `GET /api/lint/findings?status=&category=&source=&page=&size=`
+- Then:
+  - 응답 `{items, total, page, size}` (Jobs 탭과 일관)
+  - 정렬: `created_at desc` 고정
+  - 필터 미지정 시 전체 조회
+  - 클라이언트 default 페이지 크기 20, 옵션 20/50/100 (selector)
+  - 결과 0건 시 빈 items 배열 + total=0
+  - 단건 조회 `GET /api/lint/findings/{id}` 존재, 부재 시 404
+
+**SC-83** [Blocking] 상태 변경 (PATCH `/api/lint/findings/{id}`) + 권한 + Audit
+- Given: **Admin 계정**으로 로그인 (Kirin 결정 — 처리 권한은 Admin 전용, 거대화 회피)
+- When: `PATCH /api/lint/findings/{id}` 본문 `{status: "acknowledged"|"wont_fix", resolution_reason: str}`
+- Then:
+  - status 변경 + `decided_by = current_user.email` + `decided_at = now` 시스템 자동 채움
+  - `resolution_reason` 필수 (audit 추적성 보장) — 빈 문자열 거부 (422)
+  - Member가 호출 시 403
+  - 비인증 호출은 401
+
+**SC-84** [Blocking] Enum 검증 + status 한 방향 흐름
+- Given: 인증된 Admin
+- When: PATCH 요청에서 잘못된 값 전달
+- Then:
+  - 정의되지 않은 `category`/`source`/`status` 값 → 422
+  - **status 흐름은 한 방향**: `open → acknowledged` 또는 `open → wont_fix`만 허용
+  - `acknowledged → wont_fix`, `wont_fix → acknowledged`, `* → open` 등 역방향/측면 전이 → 409 또는 422
+  - 동일 status 재설정 (`open → open`) → 409 또는 idempotent 무시 (구현 일관)
+
+**SC-85** [Blocking] DELETE 미지원 (Audit Trail 보존)
+- Given: 임의 finding `id`
+- When: `DELETE /api/lint/findings/{id}` 호출
+- Then:
+  - 405 Method Not Allowed (또는 라우트 미정의로 404)
+  - finding은 어떤 status에서도 삭제 불가
+  - 이력은 영구 보존 — 결정자/시점/이유 추적 가능
+
+**SC-86** [Blocking] 사용자 신고 UI — wiki 페이지 "문제 신고" 버튼
+- Given: 인증 사용자가 `/wiki/[...slug]` 페이지 조회 중
+- When: "문제 신고" 버튼 클릭 → modal 표시 → category 선택 (default `user_reported`) + description text area + 제출
+- Then:
+  - `POST /api/lint/findings` 호출 (현재 page_path + description + category)
+  - 성공 시 "신고가 접수되었습니다" 안내 + modal 닫힘
+  - 빈 description은 클라이언트에서 거부
+  - 비로그인 상태에서 버튼 비활성 또는 미노출 (SC-2 회귀)
+
+**SC-87** [Blocking] `/lint` 페이지 — 목록 + 필터 + 페이지네이션
+- Given: 인증된 사용자가 `/lint` 페이지 접근 (nav menu 진입점 존재)
+- When: 페이지 로드
+- Then:
+  - finding 목록 표 노출 (created_at desc 정렬)
+  - 필터: status (default `open`), category, source — Member/Admin 모두 조회 가능
+  - 페이지네이션: Prev/Next + "Page N of M" + 페이지 크기 selector 20/50/100
+  - 결과 0건 시 "No findings" 안내 메시지
+  - 항목 클릭 시 상세 view 또는 인라인 확장
+
+**SC-88** [Blocking] `/lint` 상세 + 처리 UI
+- Given: Admin이 `/lint` 페이지에서 finding 항목 클릭 (상세 진입)
+- When: 상세 view 노출
+- Then:
+  - finding 메타 표시 (id/category/source/status/page_path/description/details/created_at/reported_by)
+  - status가 `open`이면 **"Acknowledge" / "Won't Fix" 버튼 + reason 입력창** 노출
+  - status가 `acknowledged`/`wont_fix`면 결정 메타(decided_by/at/resolution_reason) 표시 + 버튼 비활성/미노출
+  - Member 사용자는 상세 view에 접근하지만 처리 버튼 미노출 (SC-83 권한 일관)
+  - reason 빈 입력 시 클라이언트에서 거부
