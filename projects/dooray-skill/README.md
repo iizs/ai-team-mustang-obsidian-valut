@@ -1,6 +1,6 @@
 # dooray-skill
 
-_2026-09-09 착수 · Planning_
+_2026-09-09 착수 · v0.1 완료_
 
 Mustang 팀 에이전트가 Dooray를 사용하기 위한 Claude Code skill + 지원 라이브러리. [[projects/team-operations-rework/README]] 의 협업 환경 축(② 업무 채널) 을 실체화한다.
 
@@ -28,28 +28,36 @@ Dooray는 **프로젝트** 안에 태스크가 존재하는 구조. 즉:
 
 ## 미니멀 기능 (첫 릴리스 목표)
 
-**v0.1 (지금 세션 목표)**
-- 인증 (토큰 · base URL 로드)
-- 프로젝트 목록 조회
-- 태스크 목록 조회 (프로젝트 지정, `assignee=me` 필터 포함)
+**v0.1 — 완료 (2026-09-09)**
+- ✅ 인증 (토큰 · base URL 로드; `Authorization: dooray-api <token>` 헤더)
+- ✅ `me` — `GET /common/v1/members/me` (auth 확인 겸 organizationMemberId 확보)
+- ✅ 프로젝트 목록 조회 — `GET /project/v1/projects` (default `member=me`)
+- ✅ 태스크 목록 조회 — `GET /project/v1/projects/{project-id}/posts` (default `assignee=me` → 자동으로 `toMemberIds=<my id>` 로 해석)
 
 **v0.2 이후 후보 (실증 후 추가)**
 - 태스크 상세 조회
 - 태스크 생성 (project · title · body · assignee)
-- 태스크 상태 변경
-- 댓글 작성 · 조회
+- 태스크 상태 변경 (`set-workflow` / `set-done`)
+- 댓글 작성 · 조회 (posts/{post-id}/logs)
+- 다른 봇 유저(Breda/Hawkeye 등) 계정 부여 및 토큰 파일 세팅
 - (Task Hub 도입 시) Webhook payload 파서 · 라우터 헬퍼
 
-## 인증 · 설정 (초안)
+## 인증 · 설정
 
 파일 방식. Git 밖. `chmod 600`.
 
-- `~/.dooray/base_url` — 워크스페이스 URL 한 줄. 예: `https://mustang.dooray.com`
+- `~/.dooray/base_url` — **optional**. Dooray API 엔드포인트. 없으면 민간 클라우드(`https://api.dooray.com`) default. 다른 클라우드:
+  - 민간: `https://api.dooray.com` (개인 free tier)
+  - 공공: `https://api.gov-dooray.com`
+  - 공공 업무망: `https://api.gov-dooray.co.kr`
+  - 금융: `https://api.dooray.co.kr`
 - `~/.dooray/tokens/<agent>` — 에이전트별 personal access token 한 줄. 예: `~/.dooray/tokens/roy`
 
 Skill/라이브러리는 `agent=<이름>` 인자를 받아 해당 파일에서 토큰을 로드한다. 사람이 CLI로 쓸 때도 `--agent kirin` 형태로 통일.
 
-**Dooray에서 personal token 발급**: 각 봇 유저(및 Kirin)로 웹 UI 로그인 → 개인 설정 → API access token 생성 → 위 경로에 저장.
+**Dooray에서 personal token 발급**: 각 봇 유저(및 Kirin)로 웹 UI 로그인 → **개인 설정 → API → 개인 인증 토큰** 메뉴에서 발급 → 위 경로에 저장.
+
+> ⚠️ 웹 UI 주소(`<workspace>.dooray.com`)와 API endpoint(`api.dooray.com`)는 다르다. `base_url` 파일엔 API endpoint를 넣는다.
 
 ## 아키텍처 (초안)
 
@@ -107,13 +115,18 @@ _(op 명명 규칙은 v0.1 구현하며 확정)_
 
 ## 결정 기록 (연대순)
 
-- **2026-09-09** 프로젝트 착수. 이름 `dooray-skill` · 리포 `iizs/dooray-skill` · 문서 위치 `~/Vaults/team-mustang/projects/dooray-skill/`.
+- **2026-09-09** 프로젝트 착수. 이름 `dooray-skill` · 리포 `iizs/dooray-skill` (private) · 문서 위치 `~/Vaults/team-mustang/projects/dooray-skill/`.
 - **2026-09-09** 언어 Python (venv 격리 필수). CLI 배제 (기능 부족).
 - **2026-09-09** 첫 목표 기능 = 인증 + 프로젝트 목록 + 태스크 목록.
-- **2026-09-09** 인증 파일 배치: `~/.dooray/base_url` + `~/.dooray/tokens/<agent>` (`chmod 600`).
+- **2026-09-09** 인증 파일 배치: `~/.dooray/base_url` (optional, default `https://api.dooray.com`) + `~/.dooray/tokens/<agent>` (`chmod 600`).
+- **2026-09-09** API base URL은 워크스페이스 URL이 아닌 클라우드별 고정 endpoint (`api.dooray.com` 등). Auth 스키마: `Authorization: dooray-api <token>`.
+- **2026-09-09** "assignee=me" 축약이 API에 직접 없어서 `GET /common/v1/members/me` 로 `id`를 얻어 `toMemberIds` 로 전달. Members.me() 캐시.
+- **2026-09-09** macOS 시스템 Python(3.9 + LibreSSL) 지원 위해 `urllib3<2` 핀. requires-python = 3.9.
+- **2026-09-09** v0.1 실증 완료: Sandbox 프로젝트에서 `me`/`projects-list`/`tasks-list` 모두 정상 응답.
 
 ## 미결 / 다음 단계
 
-- Dooray API 문서 확보 (URL이 SPA라 fetch 안 됨 — PDF 요청 대기).
-- Skill 호출 인자 명명 규칙 (`op=projects.list` 형태 vs 개별 skill 여러 개).
-- Python 버전 pin (3.9 vs 3.11+).
+- 다른 봇 유저(Breda/Hawkeye) 계정 신설 및 토큰 배포.
+- v0.2 기능(태스크 상세/생성/상태 변경/댓글) 추가 시점 판단 — 실제 워크플로우 실증 후.
+- Skill 호출 인자 명명 규칙 (`op=projects.list` 형태 유지 vs 세분화된 여러 skill).
+- `SKILL.md` 를 `~/.claude/skills/dooray/` 로 배치(심볼릭 링크 등) 후 실제 Skill invoke 시연.
