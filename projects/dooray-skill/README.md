@@ -135,6 +135,8 @@ _(op 명명 규칙은 v0.1 구현하며 확정)_
 - **2026-09-09** v0.1 실증 완료: Sandbox 프로젝트에서 `me`/`projects-list`/`tasks-list` 모두 정상 응답.
 - **2026-09-09** v0.2 완료: 4개 신규 모듈(`workflows.py` / `tags.py` / `logs.py` / `members.py`) + `tasks.py` 확장. Task CRUD + workflow · tag · log · task actions 전부 실증 성공 (Sandbox 프로젝트에서 create → set-workflow → log-create → log-update → set-done → log-delete까지 e2e). 파일 첨부는 스코프 밖으로 유예.
 - **2026-09-09** 이용 시나리오 커버: `assignee=me` 자동 해석 외에도 `from_member`/`cc_member`에도 `me` shortcut 도입. `set-assignee-workflow`도 API가 `me`를 그대로 지원.
+- **2026-09-10** 유닛 테스트 59건 (auth · client · members · projects · tasks · workflows · tags · logs) + Sandbox e2e 통합 테스트 12건 도입. 통합 테스트는 `~/.dooray/tokens/roy` 없으면 auto-skip. `pytest -q` 로 전체 71건 12초 정도.
+- **2026-09-10** 관찰: `tasks.list(subjects="[...] ...")` 처럼 대괄호가 포함된 subject 필터를 보내면 Dooray 서버가 500을 반환하는 경우 있음. 통합 테스트에선 subject 필터 없이 대체.
 
 ## 미결 / 다음 단계
 
