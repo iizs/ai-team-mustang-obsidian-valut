@@ -1,6 +1,6 @@
 # dooray-skill
 
-_2026-09-09 착수 · v0.1 완료_
+_2026-09-09 착수 · v0.2 완료_
 
 Mustang 팀 에이전트가 Dooray를 사용하기 위한 Claude Code skill + 지원 라이브러리. [[projects/team-operations-rework/README]] 의 협업 환경 축(② 업무 채널) 을 실체화한다.
 
@@ -34,12 +34,22 @@ Dooray는 **프로젝트** 안에 태스크가 존재하는 구조. 즉:
 - ✅ 프로젝트 목록 조회 — `GET /project/v1/projects` (default `member=me`)
 - ✅ 태스크 목록 조회 — `GET /project/v1/projects/{project-id}/posts` (default `assignee=me` → 자동으로 `toMemberIds=<my id>` 로 해석)
 
-**v0.2 이후 후보 (실증 후 추가)**
-- 태스크 상세 조회
-- 태스크 생성 (project · title · body · assignee)
-- 태스크 상태 변경 (`set-workflow` / `set-done`)
-- 댓글 작성 · 조회 (posts/{post-id}/logs)
+**v0.2 — 완료 (2026-09-09)**
+Kirin이 지정한 범위 전부 커버:
+- ✅ 태스크 조회 필터 확장 — `assignee/from/cc/tag/parent/workflow-class/workflow-id/milestone/subject/createdAt/updatedAt/dueAt/order` 등 API의 filter를 모두 노출
+- ✅ 태스크 상세 조회 — project 스코프(`GET /project/v1/projects/{id}/posts/{pid}`) + 비스코프(`GET /project/v1/posts/{pid}`, webhook 회신용)
+- ✅ 태스크 생성 · 수정 (`POST` · `PUT`)
+- ✅ Task actions: `set-workflow` / `set-done` / `set-assignee-workflow` (`/to/{member-id}`) / `set-parent-post` / `move`
+- ✅ Workflow 관리 · 컨트롤 — `list` / `create` / `update` / `delete`(w/ toBeWorkflowId 이관)
+- ✅ Tag 관리 · 컨트롤 — `list` / `get` / `create` / `tag-group update`(mandatory · selectOne)
+- ✅ 댓글(log) — `list` / `get` / `create` / `update` / `delete`
+
+**"Project > Posts" vs "Project > Projects > Posts"**: 전자는 `project-id` 없이 `post-id`로 직접 조회 (`GET /project/v1/posts/{pid}`, `POST /post-drafts` 임시 업무). 후자는 프로젝트 스코프 CRUD + actions. 둘 다 커버 (drafts는 skip).
+
+**v0.3+ 후보**
 - 다른 봇 유저(Breda/Hawkeye 등) 계정 부여 및 토큰 파일 세팅
+- 파일 첨부(POST files, multipart) — 지금은 skip
+- 스코프 밖: 마일스톤 · 템플릿 · 훅 관리 · 멤버 관리 (Kirin이 명시적으로 skip)
 - (Task Hub 도입 시) Webhook payload 파서 · 라우터 헬퍼
 
 ## 인증 · 설정
@@ -123,6 +133,8 @@ _(op 명명 규칙은 v0.1 구현하며 확정)_
 - **2026-09-09** "assignee=me" 축약이 API에 직접 없어서 `GET /common/v1/members/me` 로 `id`를 얻어 `toMemberIds` 로 전달. Members.me() 캐시.
 - **2026-09-09** macOS 시스템 Python(3.9 + LibreSSL) 지원 위해 `urllib3<2` 핀. requires-python = 3.9.
 - **2026-09-09** v0.1 실증 완료: Sandbox 프로젝트에서 `me`/`projects-list`/`tasks-list` 모두 정상 응답.
+- **2026-09-09** v0.2 완료: 4개 신규 모듈(`workflows.py` / `tags.py` / `logs.py` / `members.py`) + `tasks.py` 확장. Task CRUD + workflow · tag · log · task actions 전부 실증 성공 (Sandbox 프로젝트에서 create → set-workflow → log-create → log-update → set-done → log-delete까지 e2e). 파일 첨부는 스코프 밖으로 유예.
+- **2026-09-09** 이용 시나리오 커버: `assignee=me` 자동 해석 외에도 `from_member`/`cc_member`에도 `me` shortcut 도입. `set-assignee-workflow`도 API가 `me`를 그대로 지원.
 
 ## 미결 / 다음 단계
 
