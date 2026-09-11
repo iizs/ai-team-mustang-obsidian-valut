@@ -1,6 +1,6 @@
 # dooray-skill
 
-_2026-09-09 착수 · v0.2 완료_
+_2026-09-09 착수 · v0.3 완료_
 
 Mustang 팀 에이전트가 Dooray를 사용하기 위한 Claude Code skill + 지원 라이브러리. [[projects/team-operations-rework/README]] 의 협업 환경 축(② 업무 채널) 을 실체화한다.
 
@@ -54,18 +54,20 @@ Kirin이 지정한 범위 전부 커버:
 
 ## 인증 · 설정
 
-파일 방식. Git 밖. `chmod 600`.
+**v0.3에서 재설계.** 세션 launcher가 env로 토큰을 주입하는 것이 정합이라는 판단.
 
-- `~/.dooray/base_url` — **optional**. Dooray API 엔드포인트. 없으면 민간 클라우드(`https://api.dooray.com`) default. 다른 클라우드:
-  - 민간: `https://api.dooray.com` (개인 free tier)
-  - 공공: `https://api.gov-dooray.com`
-  - 공공 업무망: `https://api.gov-dooray.co.kr`
-  - 금융: `https://api.dooray.co.kr`
-- `~/.dooray/tokens/<agent>` — 에이전트별 personal access token 한 줄. 예: `~/.dooray/tokens/roy`
+토큰 우선순위:
+1. **env `$DOORAY_API_KEY`** (권장) — launcher가 세팅. 봇 identity는 이 값(토큰)이 곧 정한다. skill 호출에 별도 `agent` 인자 불필요.
+2. **파일 `~/.dooray/tokens/key`** — 로컬 dev fallback (한 줄에 토큰).
+3. 둘 다 없으면 명시적 에러.
 
-Skill/라이브러리는 `agent=<이름>` 인자를 받아 해당 파일에서 토큰을 로드한다. 사람이 CLI로 쓸 때도 `--agent kirin` 형태로 통일.
+Base URL은 `~/.dooray/base_url` 파일 (optional). 없으면 민간 클라우드(`https://api.dooray.com`) default. 다른 클라우드:
+- 민간: `https://api.dooray.com`
+- 공공: `https://api.gov-dooray.com`
+- 공공 업무망: `https://api.gov-dooray.co.kr`
+- 금융: `https://api.dooray.co.kr`
 
-**Dooray에서 personal token 발급**: 각 봇 유저(및 Kirin)로 웹 UI 로그인 → **개인 설정 → API → 개인 인증 토큰** 메뉴에서 발급 → 위 경로에 저장.
+**Dooray에서 personal token 발급**: 각 봇 유저(및 Kirin)로 웹 UI 로그인 → **개인 설정 → API → 개인 인증 토큰** 메뉴에서 발급.
 
 > ⚠️ 웹 UI 주소(`<workspace>.dooray.com`)와 API endpoint(`api.dooray.com`)는 다르다. `base_url` 파일엔 API endpoint를 넣는다.
 
@@ -137,6 +139,7 @@ _(op 명명 규칙은 v0.1 구현하며 확정)_
 - **2026-09-09** 이용 시나리오 커버: `assignee=me` 자동 해석 외에도 `from_member`/`cc_member`에도 `me` shortcut 도입. `set-assignee-workflow`도 API가 `me`를 그대로 지원.
 - **2026-09-10** 유닛 테스트 59건 (auth · client · members · projects · tasks · workflows · tags · logs) + Sandbox e2e 통합 테스트 12건 도입. 통합 테스트는 `~/.dooray/tokens/roy` 없으면 auto-skip. `pytest -q` 로 전체 71건 12초 정도.
 - **2026-09-10** 관찰: `tasks.list(subjects="[...] ...")` 처럼 대괄호가 포함된 subject 필터를 보내면 Dooray 서버가 500을 반환하는 경우 있음. 통합 테스트에선 subject 필터 없이 대체.
+- **2026-09-10** 인증 방식 재설계 (v0.3). Kirin 지시: skill 스코프 좁게 (`DOORAY_API_KEY` 명확한 env 변수), 파일 기본 경로 `~/.dooray/tokens/key`, 둘 다 없으면 에러. `agent` 인자 완전 제거 — identity는 token 자체가 정하고, 봇마다 launcher env로 주입되는 방식으로 정착. `~/.dooray/tokens/<agent>` 개별 파일 관례는 폐기.
 
 ## 미결 / 다음 단계
 
