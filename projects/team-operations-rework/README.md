@@ -72,34 +72,134 @@ _(세부 원칙 추가 대기)_
 
 **요약**: 이슈 트래커 + 위키의 조합에 GitHub과 확장 도구가 얹힌다.
 
-### 감지 · 중계 매커니즘 (Task Hub, 가칭)
+### 이벤트 채널 · 진리의 원천 (Dooray as source of truth, Monitor as trigger)
 
-이슈 트래커와 GitHub 모두 webhook을 제공하지만, 에이전트들은 가정용 맥미니에 살고 있어 외부에서 들어오는 훅을 직접 받을 수 없다. 이 사이를 이어주는 **중계 서버**가 필요하다.
+이슈 트래커와 GitHub 모두 webhook을 제공하지만, 에이전트들은 가정용 맥미니에 산다. 외부 webhook을 직접 못 받으니 **Cloudflare Tunnel + 로컬 receiver** 로 이 사이를 이어준다.
 
-이 서버가 담당할 역할:
+여기서 핵심 원칙: **상태의 진리는 Dooray가 이미 갖고 있다.** 우리가 별도 큐에 status(pending/in_progress/done)를 만들면 Dooray의 workflow와 이중 관리가 되어 필연적으로 어긋난다. 그러므로:
 
-- **Webhook 수신**: Cloudflare Tunnel 같은 방식으로 공개 진입점 확보. 이슈 트래커 · GitHub 훅을 받아준다.
-- **Payload 파싱 + 라우팅**: 어느 에이전트에게 갈 태스크인지 판단.
-- **각 에이전트의 태스크 큐 관리**: 앞서 목표에서 언급한 "각자 큐를 갖고 자기 페이스로 처리한다"의 큐 실체. 훅으로 들어온 태스크를 담아두고, 담당 에이전트가 처리할 때 꺼내 전달한다.
+- **Dooray = source of truth** (태스크 상태 · 담당자 · 코멘트 · workflow 다 이미 있음).
+- **우리 layer = 이벤트 배달 계층에 국한**. 실제 처리 필요 여부는 항상 Dooray 재조회로 판단.
+- **Monitor(Claude Code built-in) = latency 최적화 채널** — durability 보증하지 않음. 놓쳐도 다음 sync가 흡수.
 
-**MCP 서버 형태로 노출**하는 것이 자연스러운 후보. 에이전트가 MCP 툴로 자기 큐를 조회 · 처리 · 보고할 수 있게 된다.
+**Receiver의 최소 역할**
 
-**미래 확장 (상상 단계)**: 각 에이전트의 에이전틱 루프 자체를 이 서버에 흡수해 자체 runner로 대체하는 방향도 상상할 수 있다. 효율성 트레이드오프는 미지수. 지금 결정 아님.
+1. Webhook 수신 (Cloudflare Tunnel 뒤에 FastAPI 등).
+2. 담당 agent 판단 (assignee organizationMemberId → agent name 매핑).
+3. 해당 세션의 Monitor 채널로 "이벤트 있음" 알림 push (WebSocket 또는 FIFO).
+4. (선택) 짧은 dedup 캐시 · 감사 로그.
 
-_(방향의 추가 결정 대기 — 감지→에이전트 세션 실제 트리거 방식(Poll vs Push), Discord 폐기 프로세스, 저널링 위치 등)_
+**"agent가 큐를 갖는다" 의 재정의**
+
+목표에서 얘기한 "각자 큐 소유" 는 우리 layer의 별도 큐가 아니라 **Dooray 안의 내 담당 태스크 집합** 자체를 큐로 본다. Receiver는 그 큐에 접근하는 알림 채널.
+
+**Claude Code plugin 으로 auto-start**
+
+Monitor는 세션이 살아있는 동안만 유효. 세션 재시작 시 다시 시작해야 함. Claude Code plugin이 monitor를 declaration으로 auto-start 해주므로, `mustang-task-hub` 플러그인을 만들어 각 agent 세션에 활성화하면 리스너가 결정론적으로 붙는다 (모델 준수에 의존 X). 플러그인 초기 스코프는 **Monitor auto-start + queue 조회/보고 도구** 수준 (분리 원칙: 정책·응답 로직은 skill 층으로 유예).
+
+**폐기된 대안 (기록용)**
+
+- 각 에이전트에 별도 agentic runner 만들기 → Claude Code 발전 혜택 못 누리므로 폐기.
+- 로컬 durable 큐에 status 3단계 관리 → Dooray와 중복 관리라 폐기.
+- 세션이 큐를 매 초 poll → Monitor push가 더 자연스러우니 primary 아님 (안전망으로만 유지 가능).
+
+### 에이전트 세션 라이프사이클
+
+```
+[start]
+  ↓
+[drain phase]  Dooray 조회 → 액션 필요 태스크 → 처리 → 다시 조회
+  ↓  (액션 필요 태스크 없을 때까지 loop)
+[monitor phase]  idle + Monitor 리스닝
+  ↓  (event 도착)
+[triggered re-check]  Dooray 재조회 (특정 태스크 or 전체) → 액션 필요 시 처리
+  ↓
+back to [monitor phase]
+```
+
+**"액션 필요" 판단 룰 (초안, 확장 예정)**
+
+- workflow=registered + assignee=me → 신규 할당, 초기 반응 필요
+- workflow=working + 마지막 코멘트가 상대방 → 답변/진행 필요
+- workflow=working + 마지막 액션이 나 → 액션 없음 (대기)
+- workflow=closed → 액션 없음
+
+**3중 안전망**
+
+| 레벨 | 매커니즘 | 담당 |
+|---|---|---|
+| 재기동 | drain phase가 backlog 자동 흡수 | plugin skill |
+| 실시간 | Monitor가 이벤트 즉시 delivery | plugin declaration |
+| Idle 안전망 | 매 N분(예: 30-60분) `/loop` dynamic 로 Dooray dry-sync | skill |
+
+Monitor가 한 채널만 죽어도 idle 안전망이 눈치채고, 안전망도 안 돌면 다음 재기동이 흡수. 손실 시나리오 없음.
+
+### 태스크 처리 흐름 안의 도달 semantics
+
+- Monitor notification은 **다음 turn boundary** 에 컨텍스트 삽입 (선점 없음). 세션이 다른 태스크 처리 중이면 그 이터레이션 종료 후 자연 큐잉.
+- 200ms 이내 stdout 라인은 하나의 알림으로 batch.
+- Idempotency는 Dooray state check로 자동 확보 — "이미 코멘트 달았나?" 를 Dooray 조회로 판단하고 필요 시만 액션.
+- 처리 완료 = Dooray state 갱신 (workflow 이동 · 코멘트 · done 처리). 우리 layer엔 done 마킹 불필요.
+
+_(다음 방향 결정 후보 — 액션 필요 판단 룰셋 세부 · plugin scope 확정 · receiver dedup 정책 · 실패 처리 escalation)_
 
 ## Track A — 협업 인프라
 
-_(작성 대기)_
+**A1. Task management 도구 선정 — 완료 (2026-09-04)**
+Dooray 확정 (개인 free tier 워크스페이스). 근거: 개별 계정 부여 자연, 국내 결제 마찰 낮음, Kirin 회사에서 이미 사용 중이라 익숙, REST API + unofficial CLI 존재.
+
+**A2. `dooray-skill` 라이브러리 — 완료 (2026-09-09/10)**
+Python 라이브러리 + Claude Code skill. v0.1 인증 · me · projects · tasks. v0.2 CRUD · workflow · tag · log · actions. v0.3 인증 재설계 — env `$DOORAY_API_KEY` 우선. 유닛 62 + Sandbox e2e 12 통과. 정본: [[projects/dooray-skill/README]].
+
+**A3. Task Hub receiver — TODO**
+Cloudflare Tunnel 뒤에 FastAPI(추정) receiver. 웹훅 수신 · 라우팅 · Monitor 채널 push. 스토리지는 dedup 캐시 정도만 (durable 큐 불필요 — Dooray가 truth). 별도 프로젝트로 파생 예정: `mustang-task-hub` 또는 유사.
+
+**A4. Claude Code plugin `mustang-task-hub` — TODO**
+플러그인이 세션 시작 시 Monitor(WebSocket/FIFO) auto-start + queue 조회 도구 노출. 응답 정책은 skill 층으로 유예. 별도 프로젝트로 파생 예정.
+
+**A5. 세션 라이프사이클 skill — TODO**
+Drain phase (Dooray sync + 처리) → monitor phase → triggered re-check 흐름을 skill로 캡슐화. plugin이 세션 시작 직후 호출.
+
+**A6. Idle 안전망 — TODO**
+`/loop` dynamic으로 N분마다 dry-sync. Monitor 채널 실패 시 backup.
+
+**A7. Discord 실제 폐기 — TODO**
+Task Hub 안착 후. 공유 memory의 Discord 관련 엔트리(feedback_discord_reply_tool.md 등) 정리.
 
 ## Track B — 정책 확산
 
-_(작성 대기)_
+**B1. 나머지 에이전트 CLAUDE.md 통일** — 미이행. Falman / envy / lina / lust. 각자 세션에서 순차. Dooray identity(별 봇 계정) 는 Kirin이 나중에 챙길 사항.
+
+**B2. 저널 자동 트리거 기준 정의** — 유예. 매뉴얼 사용 몇 주 겪은 뒤 패턴 보고 결정.
+
+**B3. Journal skill 실제 사용 흔적 축적** — 진행 중 (매 세션 결정 후 사용).
 
 ## 결정 기록 (연대순)
 
-_(작성 대기)_
+- **2026-09-03** 프로젝트 착수. Discord 폐기 방향. 각 에이전트 저널링 도입.
+- **2026-09-04** Task mgmt 도구 = **Dooray** 확정. Skill 스코프 좁게 (DOORAY_API_KEY env), agent 인자 폐기 원칙.
+- **2026-09-09** `dooray-skill` 프로젝트 착수 · v0.1 실증 완료 (인증 + me + projects + tasks).
+- **2026-09-09** `dooray-skill` v0.2 완료 (CRUD + workflow + tag + log + actions). 유닛 59 + 통합 12 테스트.
+- **2026-09-10** `dooray-skill` v0.3 완료 (인증 env-based, agent 인자 제거). launcher가 env 주입.
+- **2026-09-13** **이벤트 채널 아키텍처 확정**: Dooray as source of truth · Monitor as trigger · 3중 안전망 (drain / monitor / idle dry-sync). 별도 durable 큐 불필요. Claude Code plugin으로 Monitor auto-start. 폐기 대안: 별도 agentic runner, 로컬 status 3단계 큐.
+- **2026-09-13** 에이전트 세션 라이프사이클 정의: drain → monitor → triggered re-check. "액션 필요" 판단 룰 초안 4개 케이스.
 
 ## 미결 / 다음 단계
 
-_(작성 대기)_
+**당장 착수 후보 (Track A 순서)**
+- `mustang-task-hub` receiver 프로젝트 착수 (FastAPI + Cloudflare Tunnel + 라우팅).
+- Claude Code plugin `mustang-task-hub` 스켈레톤 (Monitor auto-start declaration).
+- 세션 라이프사이클 skill (drain + triggered re-check + dry-sync).
+
+**결정 유예**
+- Plugin scope 최종 (얇게 A vs 중간 C — receiver 만든 뒤 판단).
+- "액션 필요" 판단 룰셋 세부 (담당자 여러 명 / cc-only / 파일 첨부 반응 등).
+- 실패 처리 정책 (자동 재시도 X, 사람 escalate — 세부 채널 미정).
+- Receiver dedup 캐시 정책 (TTL · 저장소).
+- 향후 GitHub webhook 같은 소스 흡수 시 receiver 엔드포인트 분리 vs 통일.
+- 저널 자동 트리거 기준 (B2).
+
+**폐기된 대안** (재검토 필요 시 참조)
+- 각 에이전트에 커스텀 agentic runner 구축 → Claude Code 발전 혜택 못 누림.
+- 로컬 durable 큐에 status 3단계 (pending/in_progress/done) → Dooray와 중복 관리.
+- Poll-only 웨이크업 (Monitor 없이 세션 주기 조회) → Monitor push가 자연스러움, poll은 idle 안전망 용도로 격하.
