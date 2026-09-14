@@ -151,8 +151,8 @@ Dooray 확정 (개인 free tier 워크스페이스). 근거: 개별 계정 부�
 **A2. `dooray-skill` 라이브러리 — 완료 (2026-09-09/10)**
 Python 라이브러리 + Claude Code skill. v0.1 인증 · me · projects · tasks. v0.2 CRUD · workflow · tag · log · actions. v0.3 인증 재설계 — env `$DOORAY_API_KEY` 우선. 유닛 62 + Sandbox e2e 12 통과. 정본: [[projects/dooray-skill/README]].
 
-**A3. Task Hub receiver — TODO**
-Cloudflare Tunnel 뒤에 FastAPI(추정) receiver. 웹훅 수신 · 라우팅 · Monitor 채널 push. 스토리지는 dedup 캐시 정도만 (durable 큐 불필요 — Dooray가 truth). 별도 프로젝트로 파생 예정: `mustang-task-hub` 또는 유사.
+**A3. Task Hub receiver — PoC 완료 (2026-09-14), 정본 진화 중**
+`mustang-task-hub` 프로젝트로 파생 ([[projects/mustang-task-hub/README]]). FastAPI + Docker Compose. 현재 PoC 스코프 — 모든 요청 payload를 파일로 dump. Cloudflare Quick Tunnel 뒤에서 Dooray Sandbox 4개 이벤트 (postCreated · postCommentCreated · postWorkflowChanged×2) 모두 수신 검증 완료. 라우팅 · dedup · Monitor 채널 push 는 v0.2+로 진화.
 
 **A4. Claude Code plugin `mustang-task-hub` — TODO**
 플러그인이 세션 시작 시 Monitor(WebSocket/FIFO) auto-start + queue 조회 도구 노출. 응답 정책은 skill 층으로 유예. 별도 프로젝트로 파생 예정.
@@ -183,6 +183,8 @@ Task Hub 안착 후. 공유 memory의 Discord 관련 엔트리(feedback_discord_
 - **2026-09-10** `dooray-skill` v0.3 완료 (인증 env-based, agent 인자 제거). launcher가 env 주입.
 - **2026-09-13** **이벤트 채널 아키텍처 확정**: Dooray as source of truth · Monitor as trigger · 3중 안전망 (drain / monitor / idle dry-sync). 별도 durable 큐 불필요. Claude Code plugin으로 Monitor auto-start. 폐기 대안: 별도 agentic runner, 로컬 status 3단계 큐.
 - **2026-09-13** 에이전트 세션 라이프사이클 정의: drain → monitor → triggered re-check. "액션 필요" 판단 룰 초안 4개 케이스.
+- **2026-09-14** `mustang-task-hub` PoC 착수 및 검증 완료. Cloudflare Quick Tunnel → Dooray Sandbox webhook 4/4 도달. Payload 관찰: `requestOrigin.type=open-api` 를 self-loop 방지 필터로 활용 가능, `hookVersion` 문서와 실제(`version`) discrepancy 발견.
+- **2026-09-14** `dooray-skill` v0.4 — `hooks.create` 추가. Hook 등록엔 프로젝트 admin 권한 필요 (Roy를 Sandbox admin으로 승격 후 등록 성공).
 
 ## 미결 / 다음 단계
 
