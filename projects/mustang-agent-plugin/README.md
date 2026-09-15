@@ -29,19 +29,17 @@ Claude Code 플러그인 + 세션-측 skill 조합으로 **에이전트가 task-
 - 여러 monitor 선언 가능.
 - 실패 시 동작(fail-load vs silent)은 미문서 — 실증 필요.
 
-### 접근 방식 두 갈래 (확정 대기)
+### 확정: Path Y (command + WS consumer 스크립트)
 
-**Path X — plugin manifest가 `ws:` 지원하는 경우**
-```json
-[{
-  "name": "task-hub-events",
-  "description": "task-hub events for me",
-  "ws": {"url": "${TASK_HUB_WS_URL}"}
-}]
+**Path X 는 실증 결과 스키마 거부**:
 ```
-가장 얇음. 지원 여부는 실제 시도로만 확인 가능 (문서 미명시).
+[ERROR] Failed to load monitors for test-ws-monitor …
+  { "expected": "string", "code": "invalid_type", "path": [0, "command"] }
+  { "code": "unrecognized_keys", "keys": ["ws"] }
+```
+Plugin monitor 매니페스트는 `command` 만 인식. `ws:` 는 unrecognized_keys. 실패 시 monitor 만 조용히 drop (플러그인 다른 요소는 계속 로드) — 확인 방법은 `--debug-file` 로 로그 fetch.
 
-**Path Y — command만 지원하는 경우 (안전한 default)**
+**Path Y 확정**:
 ```json
 [{
   "name": "task-hub-events",
@@ -49,9 +47,13 @@ Claude Code 플러그인 + 세션-측 skill 조합으로 **에이전트가 task-
   "description": "task-hub events for me"
 }]
 ```
-번들 스크립트가 WS 클라이언트 역할. 각 프레임을 stdout 한 줄로 emit.
+번들 스크립트가 WS 클라이언트로 붙어 각 프레임을 **stdout 한 줄로 emit**. Monitor tool이 각 stdout 라인을 notification으로 세션 컨텍스트에 삽입.
 
-**의존성**: 호스트에 Python 3 + `websockets` 패키지. Plugin 설치 시 안내.
+**의존성**: 호스트에 Python 3.10+ + `websockets` 패키지. Plugin 설치 시 요구사항 안내 (README).
+
+**Consumer 스크립트 실증 (2026-09-15)**: 별도 `ws_stdout_consumer.py` 로 로컬 receiver의 WS에 붙어 시뮬 payload → 한 줄 요약 JSON stdout emit 성공. Plugin 안에 이 스크립트를 담고 `command`로 지정하면 완결.
+
+**자동 재연결**: consumer가 예외 시 5초 sleep 후 재접속 loop. Receiver 재시작에도 자연 복구.
 
 ### 플러그인 파일 구조 (Path Y 기준)
 
@@ -175,12 +177,12 @@ Skill 안에서 agent 이름 필요 시 `$JOURNAL_AGENT_NAME` 참조.
 ## 결정 기록
 
 - **2026-09-15** 초안 작성. Plugin scope 얇게 (Monitor only). Queue 도구 기각. Lifecycle 4단계, 우선순위 3축(overdue > priority > 생성시각) 정의.
+- **2026-09-15** Path Y 확정. Plugin monitor 스키마가 `ws:` 를 unrecognized_keys 로 거부하는 실증 완료 (`--debug-file` 로그로 확인). 실패 시 monitor 만 조용히 drop.
+- **2026-09-15** `ws_stdout_consumer.py` 프로토타입 실증. WS 붙어서 매 프레임 → stdout 한 줄 요약. 재접속 loop 포함.
+- **2026-09-15** 사람 계정 필터는 receiver 층에서 처리 확정 (Dooray가 사람에게 이메일/앱 알림). Receiver env `TASK_HUB_HUMAN_AGENTS=kirin` 도입 (mustang-task-hub `c9e587f`). Plugin 쪽엔 관련 로직 없음.
 
 ## 미결 · 확인 대기
 
-- **Plugin monitor의 `ws:` source 지원 여부**: 문서 미명시 → 실증 필요 (Path X vs Y 확정).
-- **Plugin 매니페스트 실패 시 동작**: silent skip vs error 로그 — 실증 필요.
-- **`task-hub-loop` skill 위치**: 플러그인 내부 (`skills/task-hub-loop/SKILL.md`) vs 기존 `~/.claude/skills/`. 플러그인 내부가 정합 (일괄 배포).
+- **`task-hub-loop` skill 위치**: 플러그인 내부 (`skills/task-hub-loop/SKILL.md`) vs 기존 `~/.claude/skills/`. 플러그인 내부가 정합 (일괄 배포). 최종 확정 대기.
 - **Skill 호출 트리거를 CLAUDE.md에서 얼마나 명시하는지**: "세션 시작 시 반드시 호출" 강제 문구 필요할지, 아니면 Monitor notification 도착 자체가 자연스러운 트리거인지.
 - **처리 예외 시 Dooray 코멘트 포맷 표준화** (에러 유형 · 재시도 안 함 안내 등).
-- **Roy 이외 봇(Breda · Hawkeye) 세션 부재 시 Kirin의 관찰 편의**: 사람 대상 알림 (macOS 푸시 등) 별도 후속.

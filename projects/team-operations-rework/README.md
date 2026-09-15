@@ -188,6 +188,8 @@ Task Hub 안착 후. 공유 memory의 Discord 관련 엔트리(feedback_discord_
 - **2026-09-15** `mustang-task-hub` v0.2 구현 · 실증 완료 ([[projects/mustang-task-hub/README]]). Self-loop / 라우팅 / WS fan-out / archival / 구조화 로그 정상. Cloudflare Quick Tunnel 뒤에서 Roy WS session에 시뮬 payload 배달 성공.
 - **2026-09-15** Identity 규약: `kirin` userCode = Kirin의 사람 계정, `iizs` = Dooray/GitHub 관리자 역할. 팀 워크플로우 문서 정리 시 반영 예정 (receiver 로직엔 영향 없음).
 - **2026-09-15** `mustang-agent-plugin` 설계 초안 ([[projects/mustang-agent-plugin/README]]). Plugin scope 얇게, queue 도구 기각, lifecycle 4단계, 우선순위 3축. Plugin monitor의 `ws:` source 지원 여부는 실증 대기 (Path X→Y fallback 준비).
+- **2026-09-15** Path Y 확정 — plugin monitor 매니페스트는 `command`만 인식(`ws:` unrecognized), 실증 로그로 확인. WS consumer 스크립트 프로토타입 실증 성공.
+- **2026-09-15** 사람 계정 배달 정책: receiver `TASK_HUB_HUMAN_AGENTS` 로 지정된 agent 이름은 WS 배달 skip (Dooray 자체 알림에 위임). mustang-task-hub c9e587f 반영. Kirin(kirin) 이 첫 대상.
 
 ## 미결 / 다음 단계
 
