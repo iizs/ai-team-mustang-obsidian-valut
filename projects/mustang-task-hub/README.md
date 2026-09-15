@@ -79,10 +79,13 @@ Cloudflare Tunnel은 receiver 컨테이너 밖에서 별도로 실행 (docker co
 - **2026-09-14** 프로젝트 착수. 이름 `mustang-task-hub` · 리포 `iizs/mustang-task-hub` (private) · 언어 Python + FastAPI · Docker 실행.
 - **2026-09-14** PoC receiver 검증 완료. Cloudflare Quick Tunnel + Dooray Sandbox webhook 4/4 도달.
 - **2026-09-14** 관찰: `requestOrigin.type=open-api` 를 self-loop 방지 필터로 사용 가능. `hookVersion` vs `version` 문서 discrepancy 문서화.
+- **2026-09-14** v0.2 스펙 확정 (매핑 규약, WS 채널, 인증, self-loop, archival, health, 로깅, fan-out 등 8개 결정).
+- **2026-09-15** v0.2 구현 완료 · 실증. 모듈 재편 (`config`, `dooray_client`, `member_cache`, `router`, `sources/dooray`, `ws_manager`, `archiver`, `log_setup`, `main`). 멤버 캐시는 프로젝트 members(id only) + `/common/v1/members/{id}` 개별 조회 조합으로 userCode 획득. Sandbox에서 self-loop skip · non-Roy source → Roy WS 배달 · 잘못된 token 404 모두 검증 통과.
 
 ## 미결
 
 - 도메인 기반 named tunnel 도입 시점 (PoC 넘어 안정 운영 시).
-- Receiver dedup 정책 (event_id 저장 방식 · TTL).
-- Agent name 매핑 소스 (config yaml vs Dooray tag vs 별도 매핑 DB).
+- Receiver dedup 정책 (event_id 저장 방식 · TTL) — v0.3에서.
 - Roy 봇이 Sandbox admin이어야 hook 등록 가능 — 봇 유저 권한 표준화 (다른 프로젝트도 admin 승격 필요).
+- Sandbox의 옛 hook (PoC 단계 등록, `/dooray-webhook` 지향, id `4421553773067818743`) 는 새 URL과 무관해 여전히 활성 → 404 응답. Dooray 웹UI에서 삭제해야 완전 정리 (API에 hook delete 없음). 방치해도 receiver는 정확히 404로 응답하니 blocker 아님.
+- Agent session 쪽 launcher가 `TASK_HUB_WS_URL` 을 자동으로 세팅하는 매커니즘 — 지금은 수동 입력.
