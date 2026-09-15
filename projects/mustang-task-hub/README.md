@@ -32,18 +32,47 @@ Task Hub receiver + agent glue. Cloudflare Tunnel 뒤에서 외부 webhook(Doora
 
 **v0.1 (완료)** PoC — payload dump.
 
-**v0.2 (예정)** 라우팅
-- assignee organizationMemberId → agent name 매핑.
-- 이벤트 타입별 처리 정책.
-- `requestOrigin.type=open-api` + source가 자기 자신 = self-loop skip.
+**v0.2 (착수 · 2026-09-14)** Fully functional receiver
 
-**v0.3 (예정)** 배달 채널
-- Monitor용 WebSocket endpoint per agent (`/events/<agent>`).
-- 또는 FIFO 대체 매커니즘.
+**결정 매트릭스**:
 
-**v0.4 (예정)** 관측성
-- dedup 캐시 (event_id 기반, 짧은 TTL).
-- 감사 로그 (수신 · 배달 이력).
+- **매핑**: `userCode == agent name` 규약. 새 멤버 추가 시 receiver 재시작. `mapping.yaml` 로 특정 `organizationMemberId → agent name` 오버라이드 지원.
+- **채널**: Monitor용 **WebSocket per agent** (`wss://<tunnel>/events/<agent>`). Fan-out — 같은 agent 이름으로 여러 세션 연결 시 모두에게 배달 (Dooray truth 원칙이 안전 보장).
+- **엔드포인트**: `/webhook/<source>/<token>` 소스 무관 구조. Source별 payload parser 모듈.
+- **인증**: URL secret path token (env로 주입). 유출 시 rotation = env token 갱신 + receiver 재시작 + Dooray 웹UI에서 옛 hook 삭제 + `dooray hook-create` 재등록.
+- **Self-loop 방지**: `requestOrigin.type == "open-api"` **AND** `source.member.userCode` == 라우팅 대상 agent → 배달 skip.
+- **Payload archival**: 매 요청 파일 dump 유지. rotation (일자별 dir, N일 보관).
+- **Health/status**: `/health` 에 ws 연결 상태, 이벤트 카운트, 버퍼 크기 등 노출.
+- **로깅**: json line stdout (received / routed / delivered / dropped / error).
+- **In-memory 버퍼 (skip)**: receiver-agent가 localhost라 실제 disconnection 창이 좁아 marginal — Dooray truth의 session drain 이 그 gap을 커버.
+
+**환경변수 (receiver 컨테이너)**:
+
+| 변수 | 필수 | 설명 |
+|---|---|---|
+| `DOORAY_API_KEY` | ✓ | 멤버 캐시 fetch용 (프로젝트 admin 계정 토큰). |
+| `DOORAY_BASE_URL` | | default `https://api.dooray.com`. 클라우드별 override. |
+| `TASK_HUB_WEBHOOK_TOKEN` | ✓ | URL secret path token. |
+| `TASK_HUB_PROJECT_IDS` | ✓ | 멤버 캐시 대상 프로젝트 id, 쉼표 구분. |
+| `TASK_HUB_MAPPING_FILE` | | override yaml 경로. default `/data/mapping.yaml`. |
+| `TASK_HUB_LOG_DIR` | | payload archive dir. default `/data/logs`. |
+| `TASK_HUB_LOG_KEEP_DAYS` | | rotation retention (default 30). |
+| `TASK_HUB_PUBLIC_URL` | | informational (Cloudflare tunnel URL), `/health`에 echo. |
+| `TASK_HUB_LOG_LEVEL` | | default `info`. |
+
+**환경변수 (agent session)**:
+
+| 변수 | 설명 |
+|---|---|
+| `TASK_HUB_WS_URL` | 세션이 Monitor로 붙을 WebSocket URL. 예: `wss://<tunnel>/events/roy`. Launcher가 주입. |
+
+Cloudflare Tunnel은 receiver 컨테이너 밖에서 별도로 실행 (docker compose에 포함 안 함) — 재시작 시 URL이 바뀌는 Quick Tunnel 특성상 tunnel URL 변경 시 agent 세션 env 갱신하고 재시작 필요.
+
+**v0.3 (예정)** 관측성 · dedup
+- 이벤트 id 기반 dedup 캐시 (짧은 TTL).
+- 감사 로그 DB or 파일.
+
+**v0.4 (예정)** Named tunnel 도입 (Quick Tunnel URL 휘발 문제 해소).
 
 ## 결정 기록
 
