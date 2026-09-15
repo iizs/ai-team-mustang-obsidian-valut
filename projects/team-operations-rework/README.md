@@ -154,11 +154,11 @@ Python 라이브러리 + Claude Code skill. v0.1 인증 · me · projects · tas
 **A3. Task Hub receiver — PoC 완료 (2026-09-14), 정본 진화 중**
 `mustang-task-hub` 프로젝트로 파생 ([[projects/mustang-task-hub/README]]). FastAPI + Docker Compose. 현재 PoC 스코프 — 모든 요청 payload를 파일로 dump. Cloudflare Quick Tunnel 뒤에서 Dooray Sandbox 4개 이벤트 (postCreated · postCommentCreated · postWorkflowChanged×2) 모두 수신 검증 완료. 라우팅 · dedup · Monitor 채널 push 는 v0.2+로 진화.
 
-**A4. Claude Code plugin `mustang-task-hub` — TODO**
-플러그인이 세션 시작 시 Monitor(WebSocket/FIFO) auto-start + queue 조회 도구 노출. 응답 정책은 skill 층으로 유예. 별도 프로젝트로 파생 예정.
+**A4. Claude Code plugin `mustang-agent-plugin` — 설계 초안 (2026-09-15)**
+설계 정본: [[projects/mustang-agent-plugin/README]]. 스코프 얇게 확정 — Monitor auto-start만. Queue 조작 도구는 기각 (Dooray가 truth). Skill은 플러그인 내부(`skills/task-hub-loop/`)로 함께 배포. Plugin monitor의 `ws:` source 지원 여부는 실증 필요 (Path X 시도 → 실패 시 Path Y command+consumer script fallback).
 
-**A5. 세션 라이프사이클 skill — TODO**
-Drain phase (Dooray sync + 처리) → monitor phase → triggered re-check 흐름을 skill로 캡슐화. plugin이 세션 시작 직후 호출.
+**A5. 세션 라이프사이클 skill — 설계 초안 (2026-09-15)**
+Plugin에 포함되는 `task-hub-loop` skill로 통합. Lifecycle 4단계 (drain → monitor → triggered re-check → drain 재개) + 액션 필요 판단 룰 + 우선순위 규칙 (overdue > priority > 생성시각). 상세: [[projects/mustang-agent-plugin/README]].
 
 **A6. Idle 안전망 — TODO**
 `/loop` dynamic으로 N분마다 dry-sync. Monitor 채널 실패 시 backup.
@@ -185,6 +185,9 @@ Task Hub 안착 후. 공유 memory의 Discord 관련 엔트리(feedback_discord_
 - **2026-09-13** 에이전트 세션 라이프사이클 정의: drain → monitor → triggered re-check. "액션 필요" 판단 룰 초안 4개 케이스.
 - **2026-09-14** `mustang-task-hub` PoC 착수 및 검증 완료. Cloudflare Quick Tunnel → Dooray Sandbox webhook 4/4 도달. Payload 관찰: `requestOrigin.type=open-api` 를 self-loop 방지 필터로 활용 가능, `hookVersion` 문서와 실제(`version`) discrepancy 발견.
 - **2026-09-14** `dooray-skill` v0.4 — `hooks.create` 추가. Hook 등록엔 프로젝트 admin 권한 필요 (Roy를 Sandbox admin으로 승격 후 등록 성공).
+- **2026-09-15** `mustang-task-hub` v0.2 구현 · 실증 완료 ([[projects/mustang-task-hub/README]]). Self-loop / 라우팅 / WS fan-out / archival / 구조화 로그 정상. Cloudflare Quick Tunnel 뒤에서 Roy WS session에 시뮬 payload 배달 성공.
+- **2026-09-15** Identity 규약: `kirin` userCode = Kirin의 사람 계정, `iizs` = Dooray/GitHub 관리자 역할. 팀 워크플로우 문서 정리 시 반영 예정 (receiver 로직엔 영향 없음).
+- **2026-09-15** `mustang-agent-plugin` 설계 초안 ([[projects/mustang-agent-plugin/README]]). Plugin scope 얇게, queue 도구 기각, lifecycle 4단계, 우선순위 3축. Plugin monitor의 `ws:` source 지원 여부는 실증 대기 (Path X→Y fallback 준비).
 
 ## 미결 / 다음 단계
 
