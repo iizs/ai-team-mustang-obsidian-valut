@@ -1,8 +1,10 @@
 # mustang-hub-agent (에이전트 runtime plugin)
 
-_2026-09-15 착수 · 구현 진행_
+_2026-09-15 착수 · v0.1 초기 스켈레톤 완성 (실 세션 실증 대기)_
 
-_기존 초안 이름 `mustang-agent-plugin` → 2026-09-15 receiver(`mustang-hub`) 리네임과 함께 `mustang-hub-agent` 로 정합화. Skill 이름도 `hub` → `hub`._
+소스: [github.com/iizs/mustang-hub-agent](https://github.com/iizs/mustang-hub-agent) (private)
+
+_기존 초안 이름 `mustang-agent-plugin` → 2026-09-15 receiver(`mustang-hub`) 리네임과 함께 `mustang-hub-agent` 로 정합화. Skill 이름도 `task-hub-loop` → `hub`._
 
 Claude Code 플러그인 + 세션-측 skill(`hub`) 조합으로 **에이전트가 mustang-hub 이벤트를 자동 수신하고 Dooray truth에 따라 처리하는 runtime**. [[projects/team-operations-rework/README]] Track A4/A5 실체.
 
@@ -199,7 +201,9 @@ Skill 안에서 agent 이름 필요 시 `$JOURNAL_AGENT_NAME` 참조.
 - **2026-09-15** 초안 작성. Plugin scope 얇게 (Monitor only). Queue 도구 기각. Lifecycle 4단계, 우선순위 3축(overdue > priority > 생성시각) 정의.
 - **2026-09-15** Path Y 확정. Plugin monitor 스키마가 `ws:` 를 unrecognized_keys 로 거부하는 실증 완료 (`--debug-file` 로그로 확인). 실패 시 monitor 만 조용히 drop.
 - **2026-09-15** `ws_stdout_consumer.py` 프로토타입 실증. WS 붙어서 매 프레임 → stdout 한 줄 요약. 재접속 loop 포함.
-- **2026-09-15** 사람 계정 필터는 receiver 층에서 처리 확정 (Dooray가 사람에게 이메일/앱 알림). Receiver env `TASK_HUB_HUMAN_AGENTS=kirin` 도입 (mustang-task-hub `c9e587f`). Plugin 쪽엔 관련 로직 없음.
+- **2026-09-15** 사람 계정 필터는 receiver 층에서 처리 확정 (Dooray가 사람에게 이메일/앱 알림). Receiver env `TASK_HUB_HUMAN_AGENTS=kirin` 도입. Plugin 쪽엔 관련 로직 없음.
+- **2026-09-15** 리네임 · v0.1 스켈레톤 완성 (`iizs/mustang-hub-agent`). plugin manifest · monitors.json (Path Y) · scripts/ws-consumer.py · skills/hub/SKILL.md · README. `claude plugin validate` 통과, standalone consumer 실행으로 receiver `/events/roy` 연결 + fake payload 배달 + stdout 한 줄 요약 emit 실증. 실 세션에서 Monitor 자동 기동은 세션 재시작 필요.
+- **2026-09-15** 실패 처리 정형 확정 (skill 안): Dooray 코멘트 + assignee 재할당(원 지시자) + edge case 4종 방어 (지시자==실행자, emailUser, from 부재, 재할당 실패).
 
 ## 미결 · 확인 대기
 
