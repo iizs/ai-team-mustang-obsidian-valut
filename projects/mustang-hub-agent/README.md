@@ -207,6 +207,7 @@ Skill 안에서 agent 이름 필요 시 `$JOURNAL_AGENT_NAME` 참조.
 
 ## 미결 · 확인 대기
 
-- **`hub` skill 위치**: 플러그인 내부 (`skills/hub/SKILL.md`) vs 기존 `~/.claude/skills/`. 플러그인 내부가 정합 (일괄 배포). 최종 확정 대기.
-- **Skill 호출 트리거를 CLAUDE.md에서 얼마나 명시하는지**: "세션 시작 시 반드시 호출" 강제 문구 필요할지, 아니면 Monitor notification 도착 자체가 자연스러운 트리거인지.
+- **`hub` skill 위치**: 확정 — 플러그인 내부 (`skills/hub/SKILL.md`) 로 함께 배포.
+- **Skill 호출 트리거를 CLAUDE.md에서 얼마나 명시하는지**: 아직 미추가. Kirin이 이벤트 path 며칠 관찰 후 결정 (2026-09-16 결정 유예).
 - **처리 예외 시 Dooray 코멘트 포맷 표준화** (에러 유형 · 재시도 안 함 안내 등).
+- **⚠ ScheduleWakeup Gap (2026-09-16 발견)**: `ScheduleWakeup` 툴이 `/loop dynamic` 모드 전용 → `--continue` 방식 세션에선 사용 불가. Skill의 60분 idle 안전망은 현 세션 구조에서 작동 안 함. 대안 후보: (A) `/loop`로 세션 시작 (세션 성격 바뀜), (B) `CronCreate` 로 세션 독립 스케줄, (C) 안전망 포기 (Monitor path + 다음 세션 시작 drain 만 유지 = 3중 → 2중), (D) receiver heartbeat WS 이벤트로 대체. 방향 결정 대기.
