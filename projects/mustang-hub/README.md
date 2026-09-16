@@ -1,10 +1,10 @@
-# mustang-task-hub
+# mustang-hub
 
-_2026-09-14 착수 · PoC 단계_
+_2026-09-14 착수 · v0.2 실증 완료 · 2026-09-15 `mustang-task-hub` → `mustang-hub` 리네임 (플러그인·skill 이름 정합화)._
 
-Task Hub receiver + agent glue. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 GitHub 등)을 받아 담당 agent에게 배달. 정본 아키텍처 방향: [[projects/team-operations-rework/README]] Track A3/A4.
+Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 GitHub 등)을 받아 담당 agent WebSocket 채널로 fan-out. 사람 계정은 Dooray 자체 알림 위임(skip). 정본 아키텍처: [[projects/team-operations-rework/README]] Track A3. Agent 쪽: [[projects/mustang-hub-agent/README]].
 
-소스: [github.com/iizs/mustang-task-hub](https://github.com/iizs/mustang-task-hub) (private)
+소스: [github.com/iizs/mustang-hub](https://github.com/iizs/mustang-hub) (private. 구 URL `mustang-task-hub` 는 GitHub redirect 유지.)
 
 ## 현재 스코프 — PoC
 

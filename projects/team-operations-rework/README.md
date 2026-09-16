@@ -95,7 +95,7 @@ _(세부 원칙 추가 대기)_
 
 **Claude Code plugin 으로 auto-start**
 
-Monitor는 세션이 살아있는 동안만 유효. 세션 재시작 시 다시 시작해야 함. Claude Code plugin이 monitor를 declaration으로 auto-start 해주므로, `mustang-task-hub` 플러그인을 만들어 각 agent 세션에 활성화하면 리스너가 결정론적으로 붙는다 (모델 준수에 의존 X). 플러그인 초기 스코프는 **Monitor auto-start + queue 조회/보고 도구** 수준 (분리 원칙: 정책·응답 로직은 skill 층으로 유예).
+Monitor는 세션이 살아있는 동안만 유효. 세션 재시작 시 다시 시작해야 함. Claude Code plugin이 monitor를 declaration으로 auto-start 해주므로, `mustang-hub-agent` 플러그인을 만들어 각 agent 세션에 활성화하면 리스너가 결정론적으로 붙는다 (모델 준수에 의존 X). 플러그인 초기 스코프는 **Monitor auto-start 만** (얇게) — 세션-측 로직은 skill(`hub`)로 캡슐화. Queue 조작 도구는 기각 (Dooray가 truth).
 
 **폐기된 대안 (기록용)**
 
@@ -141,7 +141,16 @@ Monitor가 한 채널만 죽어도 idle 안전망이 눈치채고, 안전망도 
 - Idempotency는 Dooray state check로 자동 확보 — "이미 코멘트 달았나?" 를 Dooray 조회로 판단하고 필요 시만 액션.
 - 처리 완료 = Dooray state 갱신 (workflow 이동 · 코멘트 · done 처리). 우리 layer엔 done 마킹 불필요.
 
-_(다음 방향 결정 후보 — 액션 필요 판단 룰셋 세부 · plugin scope 확정 · receiver dedup 정책 · 실패 처리 escalation)_
+### 실패 처리 방침 (조직 규범)
+
+에이전트가 태스크 처리 중 실패하면:
+
+1. **자동 재시도 없음** — 같은 원인으로 반복 실패 확률 높음. 재시도는 사람 판단.
+2. **원 지시자에게 반환** — 태스크 assignee를 원 생성자로 되돌리고 실패 코멘트 남김. 반환 없이 코멘트만 남기면 에이전트 큐에 계속 남아 무한 실패 loop → 반드시 반환.
+3. **지시자가 확인 후 판단** — 원인 파악 · 재실행 · 폐기 · 다른 에이전트 재할당 중 선택. 지시자가 사람이면 Dooray 자체 알림으로 인지, 지시자가 에이전트면 그 에이전트의 큐에 자동 진입.
+4. **반복 실패 관찰** — 같은 task 가 여러 번 반환-재할당-실패 반복하면 프로세스 재검토 (task 정의 부적절 · 필요한 도구 부재 · 판단 룰 부적절 등).
+
+구현 상세 (edge case 방어 · 코멘트 포맷): [[projects/mustang-hub-agent/README]] "실패 처리 (원 지시자에게 반환)" 소절.
 
 ## Track A — 협업 인프라
 
@@ -152,16 +161,16 @@ Dooray 확정 (개인 free tier 워크스페이스). 근거: 개별 계정 부�
 Python 라이브러리 + Claude Code skill. v0.1 인증 · me · projects · tasks. v0.2 CRUD · workflow · tag · log · actions. v0.3 인증 재설계 — env `$DOORAY_API_KEY` 우선. 유닛 62 + Sandbox e2e 12 통과. 정본: [[projects/dooray-skill/README]].
 
 **A3. Task Hub receiver — PoC 완료 (2026-09-14), 정본 진화 중**
-`mustang-task-hub` 프로젝트로 파생 ([[projects/mustang-task-hub/README]]). FastAPI + Docker Compose. 현재 PoC 스코프 — 모든 요청 payload를 파일로 dump. Cloudflare Quick Tunnel 뒤에서 Dooray Sandbox 4개 이벤트 (postCreated · postCommentCreated · postWorkflowChanged×2) 모두 수신 검증 완료. 라우팅 · dedup · Monitor 채널 push 는 v0.2+로 진화.
+`mustang-hub` 프로젝트로 파생 ([[projects/mustang-hub/README]]). FastAPI + Docker Compose. v0.2 실증 완료 — 라우팅 · self-loop 필터 · human 필터 · WS fan-out · payload archival · 구조화 로그. 2026-09-15 `mustang-task-hub` → `mustang-hub` 리네임.
 
-**A4. Claude Code plugin `mustang-agent-plugin` — 설계 초안 (2026-09-15)**
-설계 정본: [[projects/mustang-agent-plugin/README]]. 스코프 얇게 확정 — Monitor auto-start만. Queue 조작 도구는 기각 (Dooray가 truth). Skill은 플러그인 내부(`skills/task-hub-loop/`)로 함께 배포. Plugin monitor의 `ws:` source 지원 여부는 실증 필요 (Path X 시도 → 실패 시 Path Y command+consumer script fallback).
+**A4. Claude Code plugin `mustang-hub-agent` — 착수 (2026-09-15)**
+설계 정본: [[projects/mustang-hub-agent/README]]. 스코프 얇게 확정 — Monitor auto-start만. Queue 조작 도구는 기각 (Dooray가 truth). Skill(`hub`)은 플러그인 내부(`skills/hub/`)로 함께 배포. Path Y 확정(command + `ws-consumer.py`, `ws:` source는 스키마 미지원 실증).
 
-**A5. 세션 라이프사이클 skill — 설계 초안 (2026-09-15)**
-Plugin에 포함되는 `task-hub-loop` skill로 통합. Lifecycle 4단계 (drain → monitor → triggered re-check → drain 재개) + 액션 필요 판단 룰 + 우선순위 규칙 (overdue > priority > 생성시각). 상세: [[projects/mustang-agent-plugin/README]].
+**A5. 세션 라이프사이클 skill `hub` — 설계 초안 (2026-09-15)**
+Plugin에 포함. Lifecycle 4단계 (drain → monitor → triggered re-check → drain 재개) + 액션 필요 판단 룰 + 우선순위 규칙 (overdue > priority > 생성시각) + 실패 시 원 지시자 재할당 정형. 상세: [[projects/mustang-hub-agent/README]].
 
-**A6. Idle 안전망 — TODO**
-`/loop` dynamic으로 N분마다 dry-sync. Monitor 채널 실패 시 backup.
+**A6. Idle 안전망 — skill `hub`에 포함 (2026-09-15)**
+`/loop` dynamic 매 60분 wake-up 으로 drain phase 재실행. Monitor 채널 실패 · Cloudflare tunnel 순간 단절 · 세션 조용한 상태 등에서 backup. Skill 실행 정책이라 별도 인프라 없음.
 
 **A7. Discord 실제 폐기 — TODO**
 Task Hub 안착 후. 공유 memory의 Discord 관련 엔트리(feedback_discord_reply_tool.md 등) 정리.
@@ -185,9 +194,9 @@ Task Hub 안착 후. 공유 memory의 Discord 관련 엔트리(feedback_discord_
 - **2026-09-13** 에이전트 세션 라이프사이클 정의: drain → monitor → triggered re-check. "액션 필요" 판단 룰 초안 4개 케이스.
 - **2026-09-14** `mustang-task-hub` PoC 착수 및 검증 완료. Cloudflare Quick Tunnel → Dooray Sandbox webhook 4/4 도달. Payload 관찰: `requestOrigin.type=open-api` 를 self-loop 방지 필터로 활용 가능, `hookVersion` 문서와 실제(`version`) discrepancy 발견.
 - **2026-09-14** `dooray-skill` v0.4 — `hooks.create` 추가. Hook 등록엔 프로젝트 admin 권한 필요 (Roy를 Sandbox admin으로 승격 후 등록 성공).
-- **2026-09-15** `mustang-task-hub` v0.2 구현 · 실증 완료 ([[projects/mustang-task-hub/README]]). Self-loop / 라우팅 / WS fan-out / archival / 구조화 로그 정상. Cloudflare Quick Tunnel 뒤에서 Roy WS session에 시뮬 payload 배달 성공.
+- **2026-09-15** `mustang-task-hub` v0.2 구현 · 실증 완료 ([[projects/mustang-hub/README]]). Self-loop / 라우팅 / WS fan-out / archival / 구조화 로그 정상. Cloudflare Quick Tunnel 뒤에서 Roy WS session에 시뮬 payload 배달 성공.
 - **2026-09-15** Identity 규약: `kirin` userCode = Kirin의 사람 계정, `iizs` = Dooray/GitHub 관리자 역할. 팀 워크플로우 문서 정리 시 반영 예정 (receiver 로직엔 영향 없음).
-- **2026-09-15** `mustang-agent-plugin` 설계 초안 ([[projects/mustang-agent-plugin/README]]). Plugin scope 얇게, queue 도구 기각, lifecycle 4단계, 우선순위 3축. Plugin monitor의 `ws:` source 지원 여부는 실증 대기 (Path X→Y fallback 준비).
+- **2026-09-15** `mustang-agent-plugin` 설계 초안 ([[projects/mustang-hub-agent/README]]). Plugin scope 얇게, queue 도구 기각, lifecycle 4단계, 우선순위 3축. Plugin monitor의 `ws:` source 지원 여부는 실증 대기 (Path X→Y fallback 준비).
 - **2026-09-15** Path Y 확정 — plugin monitor 매니페스트는 `command`만 인식(`ws:` unrecognized), 실증 로그로 확인. WS consumer 스크립트 프로토타입 실증 성공.
 - **2026-09-15** 사람 계정 배달 정책: receiver `TASK_HUB_HUMAN_AGENTS` 로 지정된 agent 이름은 WS 배달 skip (Dooray 자체 알림에 위임). mustang-task-hub c9e587f 반영. Kirin(kirin) 이 첫 대상.
 

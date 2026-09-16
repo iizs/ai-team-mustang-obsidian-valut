@@ -1,14 +1,16 @@
-# mustang-agent-plugin (설계 초안)
+# mustang-hub-agent (에이전트 runtime plugin)
 
-_2026-09-15 초안 · 미구현_
+_2026-09-15 착수 · 구현 진행_
 
-Claude Code 플러그인 + 세션-측 skill 조합으로 **에이전트가 task-hub 이벤트를 자동 수신하고 Dooray truth에 따라 처리하는 runtime**. [[projects/team-operations-rework/README]] Track A4/A5의 실체.
+_기존 초안 이름 `mustang-agent-plugin` → 2026-09-15 receiver(`mustang-hub`) 리네임과 함께 `mustang-hub-agent` 로 정합화. Skill 이름도 `hub` → `hub`._
+
+Claude Code 플러그인 + 세션-측 skill(`hub`) 조합으로 **에이전트가 mustang-hub 이벤트를 자동 수신하고 Dooray truth에 따라 처리하는 runtime**. [[projects/team-operations-rework/README]] Track A4/A5 실체.
 
 ## 목적
 
 **세션 시작 즉시**, 모델 개입 없이 결정론적으로:
-- Dooray 이벤트 실시간 수신 채널 활성화 (WebSocket monitor via mustang-task-hub receiver).
-- 이후 세션-측 skill이 lifecycle(drain → monitor → triggered re-check)을 진행.
+- Dooray 이벤트 실시간 수신 채널 활성화 (WebSocket monitor via [[projects/mustang-hub/README|mustang-hub]] receiver).
+- 이후 세션-측 `hub` skill 이 lifecycle(drain → monitor → triggered re-check)을 진행.
 
 ## 결정 사항 (확정)
 
@@ -58,7 +60,7 @@ Plugin monitor 매니페스트는 `command` 만 인식. `ws:` 는 unrecognized_k
 ### 플러그인 파일 구조 (Path Y 기준)
 
 ```
-mustang-agent-plugin/
+mustang-hub-agent/
 ├── .claude-plugin/
 │   └── plugin.json                 # 매니페스트 (experimental.monitors 경로 지정)
 ├── monitors/
@@ -66,13 +68,13 @@ mustang-agent-plugin/
 ├── scripts/
 │   └── ws-consumer.py              # 각 event 프레임을 line으로 emit
 ├── skills/
-│   └── task-hub-loop/
+│   └── hub/
 │       └── SKILL.md                # 세션-측 lifecycle skill
 ├── README.md
 └── LICENSE
 ```
 
-## 세션-측 skill: `task-hub-loop`
+## 세션-측 skill: `hub`
 
 ### 언제 호출되나
 
@@ -144,10 +146,28 @@ Dooray truth 원칙 그대로:
 - 이미 반응한 task는 Dooray 코멘트 이력에 나 자신 마지막 활동이 있어 액션 필요 룰 2에서 자동 skip.
 - 명시적 "이미 처리한 event_id" 로컬 캐시 X.
 
-### 실패 처리
+### 실패 처리 (원 지시자에게 반환)
 
-- Task 처리 중 예외 발생 → Dooray에 실패 코멘트 남기고 loop 계속. 자동 재시도 X (같은 원인으로 반복 실패 우려). 사람 escalation은 실패 코멘트가 사람 눈에 띔.
-- 처리 시간이 세션 rate limit · context window 압박 → 별도 세션에서 재개.
+Task 처리 중 예외 발생 시:
+
+1. Dooray 코멘트 (정형): `[<agent>] 처리 실패 · <에러 요약> · <원인 힌트> · 반환합니다.`
+2. **Assignee 를 원 지시자로 재할당** — `tasks.update(to=[post.users.from])`. 반환하지 않으면 에이전트 큐에 남아 무한 실패 loop.
+3. Loop 계속 — 다음 drain에서 자신이 assignee 가 아니라 자동 skip (idempotency 확보).
+
+**Edge case 방어**
+
+| 조건 | 대응 |
+|---|---|
+| 지시자 == 나 (내가 나에게 만든 subtask 등) | 반환하면 무한 loop. **반환 skip + 코멘트만** 남기고 `workflowClass` 를 backlog 로 되돌려 사람 검토 요청. 코멘트에 "지시자==실행자라 반환 불가" 명시. |
+| 지시자가 emailUser (외부 이메일이 task 생성) | `to=[{type: emailUser, emailUser: {emailAddress, name}}]` 형식으로 재할당 (Dooray API 지원). 코멘트에 "이메일 지시자에게 반환" 명시. |
+| `post.users.from` 정보 부재 | 반환 불가 → 코멘트만 + backlog 이동 + 로그 warning. |
+| 재할당 자체가 실패 (권한 · 네트워크) | 코멘트만 남기고 loop 계속. 재할당 실패는 별도 warning log. 재시도 없음 (무한 loop 방지). |
+
+**자동 재시도는 하지 않는다** — 같은 원인으로 반복 실패 확률 높음. 사람 판단 후 재실행/폐기.
+
+세션 rate limit · context 압박은 별도 세션에서 재개 (사람이 판단).
+
+이 정책의 조직 층 규범은 [[projects/team-operations-rework/README|team-operations-rework]] "실패 처리 방침" 소절 참고.
 
 ## 환경변수
 
@@ -183,6 +203,6 @@ Skill 안에서 agent 이름 필요 시 `$JOURNAL_AGENT_NAME` 참조.
 
 ## 미결 · 확인 대기
 
-- **`task-hub-loop` skill 위치**: 플러그인 내부 (`skills/task-hub-loop/SKILL.md`) vs 기존 `~/.claude/skills/`. 플러그인 내부가 정합 (일괄 배포). 최종 확정 대기.
+- **`hub` skill 위치**: 플러그인 내부 (`skills/hub/SKILL.md`) vs 기존 `~/.claude/skills/`. 플러그인 내부가 정합 (일괄 배포). 최종 확정 대기.
 - **Skill 호출 트리거를 CLAUDE.md에서 얼마나 명시하는지**: "세션 시작 시 반드시 호출" 강제 문구 필요할지, 아니면 Monitor notification 도착 자체가 자연스러운 트리거인지.
 - **처리 예외 시 Dooray 코멘트 포맷 표준화** (에러 유형 · 재시도 안 함 안내 등).
