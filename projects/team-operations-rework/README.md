@@ -141,6 +141,15 @@ Monitor가 한 채널만 죽어도 idle 안전망이 눈치채고, 안전망도 
 - Idempotency는 Dooray state check로 자동 확보 — "이미 코멘트 달았나?" 를 Dooray 조회로 판단하고 필요 시만 액션.
 - 처리 완료 = Dooray state 갱신 (workflow 이동 · 코멘트 · done 처리). 우리 layer엔 done 마킹 불필요.
 
+### Dooray 사용 규범 (assignee vs mention)
+
+- **Assignee = 현재 반응 책임자.** 태스크의 assignee 는 "지금 이 태스크를 다음으로 처리해야 할 사람" 을 명시. Receiver 는 오직 assignee 기준으로 라우팅 · 배달.
+- **Mention (@Roy 등) = 문맥상 부르는 표기.** 대화 흔적 · 참조 · CC 용도. 반응 의무는 만들지 않는다.
+- **반응 필요한 코멘트는 assignee 도 함께 변경.** 코멘트만 남기고 assignee 를 그대로 두면 상대는 알림을 받지 않는다. 예:
+  - Roy 가 Kirin 에게 질문 코멘트 남길 때 → **동시에 assignee 를 Kirin 으로 변경**.
+  - Kirin 이 Roy 에게 지시 · 재작업 요청 코멘트 남길 때 → **동시에 assignee 를 Roy 로 변경**.
+- 이 규범은 사용자(사람 · 에이전트 모두) 가 지켜야 한다. Receiver 는 mention 기반 라우팅을 하지 않는다 (스코프 밖).
+
 ### 실패 처리 방침 (조직 규범)
 
 에이전트가 태스크 처리 중 실패하면:
