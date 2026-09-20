@@ -1,6 +1,6 @@
 # mustang-hub
 
-_2026-09-14 착수 · v0.2 실증 완료 · 2026-09-15 `mustang-task-hub` → `mustang-hub` 리네임 (플러그인·skill 이름 정합화) · 2026-09-20 폴 드레인 추가 (에이전트-side 드레인 제거)._
+_2026-09-14 착수 · v0.2 실증 완료 · 2026-09-15 `mustang-task-hub` → `mustang-hub` 리네임 (플러그인·skill 이름 정합화) · 2026-09-20 폴 드레인 추가 (에이전트-side 드레인 제거) · 2026-09-20 Cloudflare Quick Tunnel → Tailscale Funnel 이관 (안정 URL 확보)._
 
 Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 GitHub 등)을 받아 담당 agent WebSocket 채널로 fan-out. 사람 계정은 Dooray 자체 알림 위임(skip). 정본 아키텍처: [[projects/team-operations-rework/README]] Track A3. Agent 쪽: [[projects/mustang-hub-agent/README]].
 
@@ -16,6 +16,12 @@ Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 G
 
 - Cloudflare Quick Tunnel(`https://logan-administration-flying-domains.trycloudflare.com`) 뒤에서 Dooray Sandbox의 4개 이벤트 (postCreated · postCommentCreated · postWorkflowChanged × 2) 모두 정상 수신.
 - 페이로드 예시 저장 위치: `~/Projects/mustang-task-hub/logs/2026-09-14T13-58-*.json`
+
+## Public URL — Tailscale Funnel (2026-09-20 이관)
+
+- 현재 `https://kirins-mac-mini.tail465f29.ts.net/` (Mac mini 재부팅에도 유지).
+- `tailscale funnel --bg 8080` 으로 port 443 공개 → localhost:8080 프록시. Tailscale 관리 콘솔에서 (1) DNS "HTTPS Certificates" 활성 (2) `nodeAttrs: [{target:["*"], attr:["funnel"]}]` 사전 세팅 필요.
+- 이관 배경: Quick Tunnel 은 실행마다 URL 이 바뀌어 `.env` 갱신·훅 재등록 필요. Named domain 대안 검토 후 개인 도메인 없는 조건에서 Tailscale Funnel 채택 (개인 tailnet 무료 · HTTPS 자동 · 관리 편함).
 
 ## Dooray webhook payload 관찰 사항
 
@@ -67,7 +73,7 @@ Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 G
 |---|---|
 | `TASK_HUB_WS_URL` | 세션이 Monitor로 붙을 WebSocket URL. 예: `wss://<tunnel>/events/roy`. Launcher가 주입. |
 
-Cloudflare Tunnel은 receiver 컨테이너 밖에서 별도로 실행 (docker compose에 포함 안 함) — 재시작 시 URL이 바뀌는 Quick Tunnel 특성상 tunnel URL 변경 시 agent 세션 env 갱신하고 재시작 필요.
+Tunnel(현재 Tailscale Funnel)은 receiver 컨테이너 밖 host 에서 별도로 실행 (docker compose 에 포함 안 함).
 
 **v0.2.1 (2026-09-20)** 폴 드레인 추가.
 
@@ -86,7 +92,7 @@ Cloudflare Tunnel은 receiver 컨테이너 밖에서 별도로 실행 (docker co
 - Webhook 이벤트 id 기반 dedup 캐시 (짧은 TTL).
 - 감사 로그 DB or 파일.
 
-**v0.4 (예정)** Named tunnel 도입 (Quick Tunnel URL 휘발 문제 해소).
+**v0.4 (완료 · 2026-09-20)** 안정 URL 확보 — Cloudflare Named Tunnel 대신 **Tailscale Funnel** 채택. 개인 도메인 취득/등록 회피, 개인 tailnet 무료. (Cloudflare Tunnel 은 zone 소유 요구 · 기존 GoDaddy 도메인은 이관 부담. Tailscale 은 이미 사용 중이라 마찰 최소.)
 
 ## 결정 기록
 
@@ -97,13 +103,15 @@ Cloudflare Tunnel은 receiver 컨테이너 밖에서 별도로 실행 (docker co
 - **2026-09-15** v0.2 구현 완료 · 실증. 모듈 재편 (`config`, `dooray_client`, `member_cache`, `router`, `sources/dooray`, `ws_manager`, `archiver`, `log_setup`, `main`). 멤버 캐시는 프로젝트 members(id only) + `/common/v1/members/{id}` 개별 조회 조합으로 userCode 획득. Sandbox에서 self-loop skip · non-Roy source → Roy WS 배달 · 잘못된 token 404 모두 검증 통과.
 - **2026-09-16** postCommentCreated / postWorkflowChanged payload 에 assignee 정보 부재 발견 → 파서에 top-level `users.to` fallback 추가 + `post_assignees` API fallback (Dooray truth 원칙).
 - **2026-09-20** 폴 드레인 추가 (v0.2.1). 에이전트-side drain 을 receiver 로 이관. 드레인 전략을 서버에 두어 세션 형태(/loop vs --continue)에 종속되지 않게 함.
+- **2026-09-20** Cloudflare Quick Tunnel → Tailscale Funnel (v0.4). Public URL `https://kirins-mac-mini.tail465f29.ts.net/`. Dooray Sandbox hook 재등록 (id `4426061117507948068`, 옛 hook 은 웹UI 삭제 대기).
 
 ## 미결
 
-- 도메인 기반 named tunnel 도입 시점 (PoC 넘어 안정 운영 시).
 - Receiver dedup 정책 (event_id 저장 방식 · TTL) — v0.3에서.
 - Roy 봇이 Sandbox admin이어야 hook 등록 가능 — 봇 유저 권한 표준화 (다른 프로젝트도 admin 승격 필요).
-- Sandbox의 옛 hook (PoC 단계 등록, `/dooray-webhook` 지향, id `4421553773067818743`) 는 새 URL과 무관해 여전히 활성 → 404 응답. Dooray 웹UI에서 삭제해야 완전 정리 (API에 hook delete 없음). 방치해도 receiver는 정확히 404로 응답하니 blocker 아님.
+- Sandbox 의 옛 hook 들 (PoC `4421553773067818743` + Quick Tunnel `logan-administration-flying-domains.trycloudflare.com` 지향 훅) 은 API delete 미지원 → Dooray 웹UI에서 수동 삭제 필요. 방치해도 receiver 는 정확히 404 또는 미도달로 응답하니 blocker 아님.
 - Agent session 쪽 launcher가 `TASK_HUB_WS_URL` 을 자동으로 세팅하는 매커니즘 — 지금은 수동 입력.
 - 개인(private) 프로젝트 폴 대상 포함 여부 — 현 단계 스코프 밖. 필요해지면 poller 가 별도로 `--type private` 프로젝트 리스트도 훑고 각 agent 별 개인 프로젝트를 커버하는 방식으로 확장 가능.
 - 폴 주기(600s) 적정성 — 관찰 후 fine-tune.
+- Tailscale Funnel 은 host 부팅 시 자동 재기동 필요 — 지금은 수동 `tailscale funnel --bg 8080`. Mac 재부팅 대비 launchd plist 로 자동화 검토.
+- `/events/<agent>` WS 는 인증 없음 — 이전에도 Quick Tunnel 동일 조건이었지만 안정 URL 이 되어 우연 접근 가능성 소폭 증가. 단기 blocker 아님, 별도 hardening iteration 필요 시 검토.
