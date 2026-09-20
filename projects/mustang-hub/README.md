@@ -23,6 +23,18 @@ Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 G
 - `tailscale funnel --bg 8080` 으로 port 443 공개 → localhost:8080 프록시. Tailscale 관리 콘솔에서 (1) DNS "HTTPS Certificates" 활성 (2) `nodeAttrs: [{target:["*"], attr:["funnel"]}]` 사전 세팅 필요.
 - 이관 배경: Quick Tunnel 은 실행마다 URL 이 바뀌어 `.env` 갱신·훅 재등록 필요. Named domain 대안 검토 후 개인 도메인 없는 조건에서 Tailscale Funnel 채택 (개인 tailnet 무료 · HTTPS 자동 · 관리 편함).
 
+## 재부팅 자동 복구 체인
+
+로그인 후 별도 조작 없이 전체 스택이 스스로 살아나도록 3중 자동화.
+
+| 컴포넌트 | 자동화 매커니즘 | 확인 명령 |
+|---|---|---|
+| Tailscale + Funnel | Tailscale.app 자체가 로그인 시 실행 + `tailscale funnel` config 는 tailscaled 상태에 persist → 재기동 시 자동 복원 | `tailscale funnel status` |
+| OrbStack daemon | `orbctl config set app.start_at_login true` (2026-09-20 세팅) | `orbctl config get app.start_at_login` |
+| Receiver container | `docker-compose.yml` 의 `restart: unless-stopped` — OrbStack daemon 뜨면 마지막 running 이던 컨테이너 자동 재기동 | `docker inspect mustang-hub --format '{{.HostConfig.RestartPolicy}}'` |
+
+**순서 무관** — 세 컴포넌트가 각자 재시도/복원 매커니즘을 가짐. Tailscale 이 receiver 보다 먼저 뜨면 잠깐 502, receiver 가 먼저 뜨면 tailscale 복원 대기. 그 사이 발생한 webhook 은 폴 드레인이 rescue. WS 세션은 5초 재접속 loop 로 결국 붙음.
+
 ## Dooray webhook payload 관찰 사항
 
 문서와 실제 응답 차이:
