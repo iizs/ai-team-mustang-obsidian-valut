@@ -1,6 +1,6 @@
 # mustang-hub-agent (에이전트 runtime plugin)
 
-_2026-09-15 착수 · v0.1 초기 스켈레톤 완성 (실 세션 실증 대기)_
+_2026-09-15 착수 · v0.1 실증 완료 · 2026-09-20 드레인 전략 변경 (agent-side → receiver-side)_
 
 소스: [github.com/iizs/mustang-hub-agent](https://github.com/iizs/mustang-hub-agent) (private)
 
@@ -12,7 +12,9 @@ Claude Code 플러그인 + 세션-측 skill(`hub`) 조합으로 **에이전트�
 
 **세션 시작 즉시**, 모델 개입 없이 결정론적으로:
 - Dooray 이벤트 실시간 수신 채널 활성화 (WebSocket monitor via [[projects/mustang-hub/README|mustang-hub]] receiver).
-- 이후 세션-측 `hub` skill 이 lifecycle(drain → monitor → triggered re-check)을 진행.
+- 이후 세션-측 `hub` skill 이 notification 을 소비해 태스크를 처리.
+
+**드레인 담당 위치**: 서버(mustang-hub receiver)의 폴 드레인. 에이전트 skill 은 notification-driven only — 세션 시작 드레인 · 안전망 wake-up 개념 없음.
 
 ## 결정 사항 (확정)
 
@@ -80,40 +82,35 @@ mustang-hub-agent/
 
 ### 언제 호출되나
 
-**Trigger 1 — 세션 시작 직후** (CLAUDE.md 안내): 세션 열리자마자 skill 호출 → drain phase 실행.
+**Trigger — Monitor notification 도착**. Claude Code 가 자동으로 컨텍스트에 삽입한 `<task-notification>` 을 본 다음 turn 에 모델이 이벤트 확인 → `hub` skill 호출.
 
-**Trigger 2 — Monitor notification 도착** (Claude Code가 자동으로 컨텍스트에 삽입): 다음 turn 에서 모델이 이벤트 확인 → skill 호출 → triggered re-check.
+Notification 은 두 종류:
+1. **Webhook 이벤트** — Dooray 실 이벤트 실시간.
+2. **폴 드레인** (`hook_event=pollDrain`, `request_origin=poll`) — receiver 가 주기적으로 pending 을 훑어서 push. Webhook 누락 · 세션 다운 사이 발생분 회복 용도. Skill 관점에선 처리 로직 동일.
 
-**Trigger 3 — 주기적 wake-up** (안전망, `/loop` dynamic 20~60분): Monitor가 조용할 때 fallback으로 drain phase 재실행.
+**세션 시작 드레인 · 주기적 wake-up 안전망 없음** — 드레인은 서버가 담당.
 
-### Lifecycle (Kirin 초안 정련)
+### 처리 흐름 (skill 안)
 
 ```
-[start / plugin activation]
+notification 도착
   ↓
- (a) [drain phase]
-  1. Dooray API 호출: 내가 assignee인 task 목록
-     filter: workflow_class in {registered, working}
-  2. 각 task를 "액션 필요" 판단 (아래 룰)
-  3. 액션 필요 task 없음 → (b) monitor phase
-  4. 액션 필요 task 있음 → 우선순위 정렬 → 첫 번째 처리 → step 1로 반복
-     (매 처리 후 재조회 = 새 이벤트 자연 흡수)
+ (컨텍스트에 <task-notification> 삽입)
   ↓
- (b) [monitor phase]
-  Plugin이 auto-start한 Monitor가 wss://.../events/<me> 리스닝.
-  세션은 idle 상태. 새 프롬프트도 없고 처리할 task도 없음.
-  ↓ (Monitor notification 도착 OR loop wake-up)
- (c) [triggered re-check]
-  · notification 이 온 경우:
-      payload의 post_id로 특정 task 조회 → 액션 필요? → 처리
-      (여러 태스크가 동시 관여된 이벤트면 각각 판단)
-  · loop wake-up 인 경우 (안전망):
-      (a)와 동일한 drain phase 재실행
+ 다음 turn: hub skill 호출
   ↓
- 처리 후 → (a)로 복귀 (drain phase = 잔여 확인)
+ project_id / post_id 로 dooray task-get (Dooray = truth)
+  ↓
+ "액션 필요" 룰 판단
+  ↓                  ↓
+액션 없음 (자기 활동  액션 필요
+흔적 있음 등)         ↓
+  ↓                  처리 → 코멘트 · workflow 이동 · assignee 재할당
+ 짧게 종료             ↓
+                    turn 종료 (다음 notification 대기)
 ```
 
-**드레인 phase 를 매 처리 후 반복**하는 이유: task 처리 사이에 새 이벤트가 오면 자동 흡수 (별도 큐 없이 Dooray가 truth).
+**Idempotency 는 skill 안에서 자동** — 매 호출마다 Dooray 재fetch → 자기 마지막 코멘트 · workflow 이동 흔적이 있으면 액션 필요 룰이 자동 skip. 폴 드레인이 동일 태스크를 반복 push 해도 이 지점에서 걸러진다.
 
 ### "액션 필요" 판단 룰
 
@@ -128,24 +125,22 @@ mustang-hub-agent/
 **개별 담당자 상태(assignee-specific workflowId)** 도 별도 확인 필요:
 - 내가 아직 특정 workflowId를 안 완료했다면 (예: 다른 담당자만 완료) 여전히 액션 필요일 수 있음. 실제 payload에서 `post.users.to[].workflowId` 로 판단.
 
-### 우선순위 규칙 (신규)
+### 우선순위 규칙 (참고)
 
-다중 task drain 시 정렬 축, 상단이 우선:
+Notification 은 도착 순으로 처리되므로 강한 정렬 개념이 skill 안에 필요치는 않다. 다만 여러 notification 이 짧은 시간에 몰려 있을 때 어느 것부터 볼지의 상식적 기준:
 
-1. **Overdue 여부** (dueDate < now): overdue → 최우선.
+1. **Overdue 여부** (dueDate < now).
 2. **Priority 필드**: `highest > high > normal > low > lowest > none`.
-3. **Tie-break — 생성 시각 오름차순** (오래된 것 먼저, FIFO).
+3. **Tie-break — 생성 시각 오름차순** (FIFO).
 
-미래 확장 옵션 (초기엔 skip):
-- 특정 tag(예: `urgent`)가 붙으면 부스트.
-- 특정 assigner가 보낸 task 부스트 (예: Kirin의 지시 우선).
-- Milestone 기반 정렬.
+미래 확장 옵션 (초기엔 skip): tag / assigner / milestone 기반 부스트.
 
 ### Idempotency
 
 Dooray truth 원칙 그대로:
 - 처리 전에 항상 최신 Dooray 상태 fetch.
-- 이미 반응한 task는 Dooray 코멘트 이력에 나 자신 마지막 활동이 있어 액션 필요 룰 2에서 자동 skip.
+- 이미 반응한 task 는 Dooray 코멘트 이력에 나 자신 마지막 활동이 있어 액션 필요 룰에서 자동 skip.
+- 폴 드레인이 반복 push 해도 이 지점에서 걸러진다.
 - 명시적 "이미 처리한 event_id" 로컬 캐시 X.
 
 ### 실패 처리 (원 지시자에게 반환)
@@ -185,16 +180,7 @@ Skill 안에서 agent 이름 필요 시 `$JOURNAL_AGENT_NAME` 참조.
 
 ## Env 미설정 시 정책
 
-- `TASK_HUB_WS_URL` 없음 → plugin monitor 시작 실패 (또는 즉시 exit). Skill은 여전히 CLAUDE.md 지시로 호출됨 — monitor phase 진입 못하고 계속 drain-only 동작.
-- 실증으로 정확한 실패 시나리오 관찰 필요.
-
-## 실증 · 검증 계획
-
-1. **Path X 시도 → 실패 시 Path Y로 fallback**.
-2. Roy 세션에서 plugin 활성화 → `/health` 로 receiver 쪽에 `ws_connections: {roy: 1}` 확인.
-3. Kirin이 웹UI에서 Roy 태스크에 코멘트 → Monitor notification → skill이 액션 판단 → Dooray에 응답 코멘트.
-4. Session 재시작 → drain phase가 backlog 흡수 확인.
-5. `/loop` dynamic wake-up 실증 (안전망).
+- `TASK_HUB_WS_URL` 없음 → plugin monitor 시작 실패 (또는 즉시 exit). Skill 은 여전히 CLAUDE.md 지시로 호출 가능하지만 notification 도착 채널이 없으니 실질 무용. Launcher 가 env 를 확실히 주입해야 함.
 
 ## 결정 기록
 
@@ -204,10 +190,12 @@ Skill 안에서 agent 이름 필요 시 `$JOURNAL_AGENT_NAME` 참조.
 - **2026-09-15** 사람 계정 필터는 receiver 층에서 처리 확정 (Dooray가 사람에게 이메일/앱 알림). Receiver env `TASK_HUB_HUMAN_AGENTS=kirin` 도입. Plugin 쪽엔 관련 로직 없음.
 - **2026-09-15** 리네임 · v0.1 스켈레톤 완성 (`iizs/mustang-hub-agent`). plugin manifest · monitors.json (Path Y) · scripts/ws-consumer.py · skills/hub/SKILL.md · README. `claude plugin validate` 통과, standalone consumer 실행으로 receiver `/events/roy` 연결 + fake payload 배달 + stdout 한 줄 요약 emit 실증. 실 세션에서 Monitor 자동 기동은 세션 재시작 필요.
 - **2026-09-15** 실패 처리 정형 확정 (skill 안): Dooray 코멘트 + assignee 재할당(원 지시자) + edge case 4종 방어 (지시자==실행자, emailUser, from 부재, 재할당 실패).
+- **2026-09-16** 실 세션 e2e 최초 실증. Kirin 웹UI 태스크 생성 → hub skill 자동 호출 → 처리 완결 확인. Payload assignee 위치 불일치 버그(4~5건 dropped_no_target) 발견 → parser fallback + API fallback 로 수정.
+- **2026-09-16** Dooray 사용 규범 확정 — 라우팅은 assignee 만 사용, 반응 필요한 코멘트는 반드시 assignee 도 함께 변경 (mention 라우팅 미도입).
+- **2026-09-20** **드레인 전략을 receiver-side 로 이관** (mustang-hub v0.2.1). 배경: `ScheduleWakeup` 이 `/loop dynamic` 모드 전용이라 `--continue` 세션에선 60분 안전망 wake-up 이 작동 안 함. Skill 을 lifecycle 관리 주체에서 notification 소비자로 축소 — 세션 시작 드레인 · 60분 안전망 · CLAUDE.md 강한 트리거 문구 세 개가 다 사라짐. Skill 은 notification-driven only.
 
 ## 미결 · 확인 대기
 
 - **`hub` skill 위치**: 확정 — 플러그인 내부 (`skills/hub/SKILL.md`) 로 함께 배포.
-- **Skill 호출 트리거를 CLAUDE.md에서 얼마나 명시하는지**: 아직 미추가. Kirin이 이벤트 path 며칠 관찰 후 결정 (2026-09-16 결정 유예).
 - **처리 예외 시 Dooray 코멘트 포맷 표준화** (에러 유형 · 재시도 안 함 안내 등).
-- **⚠ ScheduleWakeup Gap (2026-09-16 발견)**: `ScheduleWakeup` 툴이 `/loop dynamic` 모드 전용 → `--continue` 방식 세션에선 사용 불가. Skill의 60분 idle 안전망은 현 세션 구조에서 작동 안 함. 대안 후보: (A) `/loop`로 세션 시작 (세션 성격 바뀜), (B) `CronCreate` 로 세션 독립 스케줄, (C) 안전망 포기 (Monitor path + 다음 세션 시작 drain 만 유지 = 3중 → 2중), (D) receiver heartbeat WS 이벤트로 대체. 방향 결정 대기.
+- **폴 드레인 주기 fine-tune** — 현재 receiver-side default 600s. 관찰 후 조정 ([[projects/mustang-hub/README]]).

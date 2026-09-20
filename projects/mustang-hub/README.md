@@ -1,6 +1,6 @@
 # mustang-hub
 
-_2026-09-14 착수 · v0.2 실증 완료 · 2026-09-15 `mustang-task-hub` → `mustang-hub` 리네임 (플러그인·skill 이름 정합화)._
+_2026-09-14 착수 · v0.2 실증 완료 · 2026-09-15 `mustang-task-hub` → `mustang-hub` 리네임 (플러그인·skill 이름 정합화) · 2026-09-20 폴 드레인 추가 (에이전트-side 드레인 제거)._
 
 Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 GitHub 등)을 받아 담당 agent WebSocket 채널로 fan-out. 사람 계정은 Dooray 자체 알림 위임(skip). 정본 아키텍처: [[projects/team-operations-rework/README]] Track A3. Agent 쪽: [[projects/mustang-hub-agent/README]].
 
@@ -50,13 +50,14 @@ Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 G
 
 | 변수 | 필수 | 설명 |
 |---|---|---|
-| `DOORAY_API_KEY` | ✓ | 멤버 캐시 fetch용 (프로젝트 admin 계정 토큰). |
+| `DOORAY_API_KEY` | ✓ | 멤버 캐시 fetch용 (프로젝트 admin 계정 토큰). 폴 드레인의 posts 조회도 이 토큰. |
 | `DOORAY_BASE_URL` | | default `https://api.dooray.com`. 클라우드별 override. |
 | `TASK_HUB_WEBHOOK_TOKEN` | ✓ | URL secret path token. |
-| `TASK_HUB_PROJECT_IDS` | ✓ | 멤버 캐시 대상 프로젝트 id, 쉼표 구분. |
+| `TASK_HUB_PROJECT_IDS` | ✓ | 멤버 캐시 · 폴 드레인 대상 프로젝트 id, 쉼표 구분 (public 프로젝트 위주). |
 | `TASK_HUB_MAPPING_FILE` | | override yaml 경로. default `/data/mapping.yaml`. |
 | `TASK_HUB_LOG_DIR` | | payload archive dir. default `/data/logs`. |
 | `TASK_HUB_LOG_KEEP_DAYS` | | rotation retention (default 30). |
+| `TASK_HUB_POLL_INTERVAL_SEC` | | 폴 드레인 주기 (default 600 = 10분). `0` 이면 폴 비활성. |
 | `TASK_HUB_PUBLIC_URL` | | informational (Cloudflare tunnel URL), `/health`에 echo. |
 | `TASK_HUB_LOG_LEVEL` | | default `info`. |
 
@@ -68,8 +69,21 @@ Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 G
 
 Cloudflare Tunnel은 receiver 컨테이너 밖에서 별도로 실행 (docker compose에 포함 안 함) — 재시작 시 URL이 바뀌는 Quick Tunnel 특성상 tunnel URL 변경 시 agent 세션 env 갱신하고 재시작 필요.
 
-**v0.3 (예정)** 관측성 · dedup
-- 이벤트 id 기반 dedup 캐시 (짧은 TTL).
+**v0.2.1 (2026-09-20)** 폴 드레인 추가.
+
+- 배경: agent-side drain(세션 시작 시 · 60분 안전망)은 세션 형태(/loop vs --continue)에 종속 — `ScheduleWakeup` 은 `/loop dynamic` 모드 전용이라 우리 `--continue` 세션에선 안전망이 안 걸림. `--continue` 를 유지하면서 드레인을 살리려면 서버 쪽으로 옮기는 게 맞음.
+- 설계: `Poller` (app/poller.py) 가 백그라운드 asyncio task 로 `TASK_HUB_POLL_INTERVAL_SEC` 마다 tick.
+  - WS 연결된 각 agent (`human_agents` 제외) 별로 `member_id_for_agent` 역조회.
+  - `TASK_HUB_PROJECT_IDS` 각 프로젝트에 `list_pending_posts(toMemberIds=<mid>, postWorkflowClasses=registered,working)` 호출.
+  - 각 pending post 를 `hook_event=pollDrain`, `request_origin=poll` envelope 으로 WS push.
+- **간단 dedup**: `(agent, post_id) → last postUpdatedAt` 을 in-memory 로 추적. 값 변화 없으면 같은 tick 에서 skip → 매 폴마다 skill 재호출 폭풍 방지. 재시작 시 상태 리셋 (Dooray truth idempotency 로 회복 가능).
+- 완료·재할당으로 pending 에서 빠지면 상태 prune → 재등장 시 즉시 push.
+- 사람 계정 (`human_agents`) 은 폴 대상에서 자동 제외.
+- 개인(private) 프로젝트는 스코프 밖 — 현 단계 public 프로젝트 (`TASK_HUB_PROJECT_IDS` 명시분) 만 훑음.
+- `poll_delivered` 카운터, `/health` 응답에 `poll_interval_sec` 노출.
+
+**v0.3 (예정)** 관측성 · dedup 고도화
+- Webhook 이벤트 id 기반 dedup 캐시 (짧은 TTL).
 - 감사 로그 DB or 파일.
 
 **v0.4 (예정)** Named tunnel 도입 (Quick Tunnel URL 휘발 문제 해소).
@@ -81,6 +95,8 @@ Cloudflare Tunnel은 receiver 컨테이너 밖에서 별도로 실행 (docker co
 - **2026-09-14** 관찰: `requestOrigin.type=open-api` 를 self-loop 방지 필터로 사용 가능. `hookVersion` vs `version` 문서 discrepancy 문서화.
 - **2026-09-14** v0.2 스펙 확정 (매핑 규약, WS 채널, 인증, self-loop, archival, health, 로깅, fan-out 등 8개 결정).
 - **2026-09-15** v0.2 구현 완료 · 실증. 모듈 재편 (`config`, `dooray_client`, `member_cache`, `router`, `sources/dooray`, `ws_manager`, `archiver`, `log_setup`, `main`). 멤버 캐시는 프로젝트 members(id only) + `/common/v1/members/{id}` 개별 조회 조합으로 userCode 획득. Sandbox에서 self-loop skip · non-Roy source → Roy WS 배달 · 잘못된 token 404 모두 검증 통과.
+- **2026-09-16** postCommentCreated / postWorkflowChanged payload 에 assignee 정보 부재 발견 → 파서에 top-level `users.to` fallback 추가 + `post_assignees` API fallback (Dooray truth 원칙).
+- **2026-09-20** 폴 드레인 추가 (v0.2.1). 에이전트-side drain 을 receiver 로 이관. 드레인 전략을 서버에 두어 세션 형태(/loop vs --continue)에 종속되지 않게 함.
 
 ## 미결
 
@@ -89,3 +105,5 @@ Cloudflare Tunnel은 receiver 컨테이너 밖에서 별도로 실행 (docker co
 - Roy 봇이 Sandbox admin이어야 hook 등록 가능 — 봇 유저 권한 표준화 (다른 프로젝트도 admin 승격 필요).
 - Sandbox의 옛 hook (PoC 단계 등록, `/dooray-webhook` 지향, id `4421553773067818743`) 는 새 URL과 무관해 여전히 활성 → 404 응답. Dooray 웹UI에서 삭제해야 완전 정리 (API에 hook delete 없음). 방치해도 receiver는 정확히 404로 응답하니 blocker 아님.
 - Agent session 쪽 launcher가 `TASK_HUB_WS_URL` 을 자동으로 세팅하는 매커니즘 — 지금은 수동 입력.
+- 개인(private) 프로젝트 폴 대상 포함 여부 — 현 단계 스코프 밖. 필요해지면 poller 가 별도로 `--type private` 프로젝트 리스트도 훑고 각 agent 별 개인 프로젝트를 커버하는 방식으로 확장 가능.
+- 폴 주기(600s) 적정성 — 관찰 후 fine-tune.
