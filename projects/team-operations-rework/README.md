@@ -181,8 +181,8 @@ Plugin에 포함. Lifecycle 4단계 (drain → monitor → triggered re-check �
 **A6. Idle 안전망 — skill `hub`에 포함 (2026-09-15)**
 `/loop` dynamic 매 60분 wake-up 으로 drain phase 재실행. Monitor 채널 실패 · Cloudflare tunnel 순간 단절 · 세션 조용한 상태 등에서 backup. Skill 실행 정책이라 별도 인프라 없음.
 
-**A7. Discord 실제 폐기 — TODO**
-Task Hub 안착 후. 공유 memory의 Discord 관련 엔트리(feedback_discord_reply_tool.md 등) 정리.
+**A7. Discord 실제 폐기 — 부분 진행 (2026-09-22)**
+Task Hub 안착 완료. Discord 를 완전히 폐기하지 않고, "**일부 에이전트는 Discord 로만 접근**" 옵션을 유지하기로 방향 조정. 이를 위한 별도 브릿지: [[projects/discord-agent-runner/README]] (v0.1 착수). `plugin:discord@inline` 은 브릿지 안정화 후 `scripts/start.sh` 에서 제거 예정. 공유 memory 의 Discord 관련 엔트리 정리는 완전 폐기 시점에.
 
 ## Track B — 정책 확산
 
