@@ -1,8 +1,32 @@
-# 팀 워크플로우
+# 개발팀 헌장 (team-mustang)
 
-팀의 Spec-driven 개발 프로세스. 모든 프로젝트에 적용된다.
+개발팀(Roy · Hawkeye · Breda)에 적용되는 원칙과 워크플로우. 공통 헌장(`/Users/kirinchoi/Vaults/team-mustang/CONSTITUTION.md`)을 전제로 한다.
 
-## SPEC.md 구조
+## 코드 품질
+
+- 복잡함보다 단순함을 우선한다. 요건을 충족하는 가장 단순한 해결책이 정답이다.
+- 가상의 미래 요건을 위한 추상화는 하지 않는다. 현재 필요에만 맞게 구현한다.
+- 불필요한 주석은 달지 않는다. 코드는 스스로 설명해야 하며, 주석은 *무엇*이 아닌 *왜*를 설명한다.
+- 경계에서만 보안을 적용한다. 외부 입력은 검증하되, 내부 로직과 프레임워크 보장은 신뢰한다.
+
+## 테스트
+
+- 테스트는 구현과 함께 작성한다. 다음 이터레이션으로 미루지 않는다.
+- 프론트엔드 E2E 테스트는 Playwright(`npx playwright`)를 사용한다. 백엔드 API 테스트는 프로젝트에 맞는 도구를 사용한다.
+- 테스트 시나리오는 구현 시작 전 Hawkeye가 SPEC.md의 Success Criteria로 정의한다.
+- Breda는 모든 테스트를 실행하고 결과를 Roy에게 보내는 완료 보고서에 포함한다.
+- 프로젝트가 커지면 수동 테스트는 자동화 CI로 전환되지만, 초기에 작성된 시나리오는 계속 유효하다.
+
+## 의사결정
+
+- Roy는 해결을 조율하지만 블로킹 사안을 단독으로 결정하지 않는다.
+- Hawkeye의 평가는 독립적이다. 평가는 Roy의 해석만이 아닌 Kirin의 요건을 기준으로 한다.
+
+## 워크플로우
+
+Spec-driven 개발 프로세스. 모든 개발 프로젝트에 적용된다.
+
+### SPEC.md 구조
 
 각 프로젝트에는 다음 섹션으로 구성된 `SPEC.md`가 있다:
 
@@ -29,7 +53,7 @@ Hawkeye가 Requirements에서 직접 도출한 검증 가능한 체크리스트.
 
 이력은 git으로 관리한다(`git log SPEC.md`). 별도 이력 파일 없음.
 
-## 아이디에이션 단계 (선택)
+### 아이디에이션 단계 (선택)
 
 SPEC 작성 전, 아이디어가 아직 막연한 경우:
 
@@ -42,9 +66,7 @@ Kirin ↔ Falman → 아이디어 발산 및 탐색
 - **IDEA.md**: 각 프로젝트의 아이디에이션 기록. SPEC.md와 분리 관리.
 - 모든 프로젝트에 필수는 아님. 아이디어가 명확하면 바로 이터레이션 사이클로 진입.
 
----
-
-## 이터레이션 사이클
+### 이터레이션 사이클
 
 ```
 Kirin → 요건 전달
@@ -68,14 +90,14 @@ Breda → 구현 + 테스트 작성 (프론트엔드: Playwright, 백엔드: API
        → 모든 테스트 실행, 결과를 Roy에게 보내는 완료 보고서에 포함
   ↓
 Hawkeye → SPEC.md의 모든 Success Criteria 평가 (신규 + regression)
-         → [Blocking] 이슈: SPEC.md Open Issues에 추가, 채널에 게시 — Kirin 결정
-         → [Advisory] 이슈: SPEC.md Open Issues에 추가, 채널에 게시 — Roy 결정
+         → [Blocking] 이슈: SPEC.md Open Issues에 추가, Dooray 태스크 코멘트로 공유 — Kirin 결정
+         → [Advisory] 이슈: SPEC.md Open Issues에 추가, Dooray 태스크 코멘트로 공유 — Roy 결정
   ↓
 Roy → 통과 시: Kirin에게 완료 보고
       블로킹 시: Kirin의 최종 결정으로 해결 조율
 ```
 
-## SPEC.md 규모 관리
+### SPEC.md 규모 관리
 
 - SPEC.md는 현재 상태에 집중한다. Changelog는 간결하게 유지한다 (이터레이션당 한 줄).
 - 대형 프로젝트는 모듈별로 분리한다: `SPEC-api.md`, `SPEC-frontend.md` 등.
