@@ -1,6 +1,6 @@
 # dooray-skill
 
-_2026-09-09 착수 · v0.3 완료_
+_2026-09-09 착수 · v0.5 완료 (2026-09-26 첨부파일)_
 
 Mustang 팀 에이전트가 Dooray를 사용하기 위한 Claude Code skill + 지원 라이브러리. [[projects/team-operations-rework/README]] 의 협업 환경 축(② 업무 채널) 을 실체화한다.
 
@@ -46,9 +46,16 @@ Kirin이 지정한 범위 전부 커버:
 
 **"Project > Posts" vs "Project > Projects > Posts"**: 전자는 `project-id` 없이 `post-id`로 직접 조회 (`GET /project/v1/posts/{pid}`, `POST /post-drafts` 임시 업무). 후자는 프로젝트 스코프 CRUD + actions. 둘 다 커버 (drafts는 skip).
 
-**v0.3+ 후보**
-- 다른 봇 유저(Breda/Hawkeye 등) 계정 부여 및 토큰 파일 세팅
-- 파일 첨부(POST files, multipart) — 지금은 skip
+**v0.4 — 완료 (2026-09-14)** `hook-create` (프로젝트 webhook 등록).
+
+**v0.5 — 완료 (2026-09-26)** 업무·댓글 첨부파일 읽기/첨부.
+- ✅ 업무 첨부: `task-files-list` / `task-file-get` / `task-file-download` / `task-file-upload` / `task-file-delete`
+- ✅ 댓글 첨부: `log-create` · `log-update` 에 `--attach <path>` (업로드 후 연결) · `--attach-file-id <id>`
+- Dooray 모델: 업무에 올린 파일은 전부 업무 파일 풀(`task.files`)에 들어가고, 댓글 첨부는 그 파일 id 를 `attachFileIds` 로 참조. 댓글별 첨부는 `log-get` 의 `files[].id` 로만 확인 가능 (`logs-list` 응답엔 없음).
+- 파일 API 는 `api.dooray.com` 이 307 로 `file-api.dooray.com/{uploads|downloads}/...` 를 가리킴 — URL 을 직접 조립하지 않고 Location 을 인증 헤더 유지한 채 수동으로 따라감 (requests 기본 리다이렉트는 다른 호스트에서 Authorization 을 뗌).
+
+**후보**
+- 다른 봇 유저(Breda/Hawkeye 등) 계정 부여 — 2026-09-22 완료 (env 기반)
 - 스코프 밖: 마일스톤 · 템플릿 · 훅 관리 · 멤버 관리 (Kirin이 명시적으로 skip)
 - (Task Hub 도입 시) Webhook payload 파서 · 라우터 헬퍼
 
@@ -140,6 +147,8 @@ _(op 명명 규칙은 v0.1 구현하며 확정)_
 - **2026-09-10** 유닛 테스트 59건 (auth · client · members · projects · tasks · workflows · tags · logs) + Sandbox e2e 통합 테스트 12건 도입. 통합 테스트는 `~/.dooray/tokens/roy` 없으면 auto-skip. `pytest -q` 로 전체 71건 12초 정도.
 - **2026-09-10** 관찰: `tasks.list(subjects="[...] ...")` 처럼 대괄호가 포함된 subject 필터를 보내면 Dooray 서버가 500을 반환하는 경우 있음. 통합 테스트에선 subject 필터 없이 대체.
 - **2026-09-10** 인증 방식 재설계 (v0.3). Kirin 지시: skill 스코프 좁게 (`DOORAY_API_KEY` 명확한 env 변수), 파일 기본 경로 `~/.dooray/tokens/key`, 둘 다 없으면 에러. `agent` 인자 완전 제거 — identity는 token 자체가 정하고, 봇마다 launcher env로 주입되는 방식으로 정착. `~/.dooray/tokens/<agent>` 개별 파일 관례는 폐기.
+- **2026-09-14** v0.4 `hook-create` (mustang-hub receiver 연동용 webhook 등록).
+- **2026-09-26** v0.5 첨부파일 (Kirin 지시, Roy 단독 진행). Sandbox 실측으로 file-api 경로 prefix(`/uploads`, `/downloads`) 와 댓글 첨부 연결 방식 확인 후 구현. 유닛 79 · 통합 13 통과, CLI 경로 실측 확인.
 
 ## 미결 / 다음 단계
 
