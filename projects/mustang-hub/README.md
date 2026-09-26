@@ -68,7 +68,7 @@ Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 G
 
 | 변수 | 필수 | 설명 |
 |---|---|---|
-| `DOORAY_API_KEY` | ✓ | 멤버 캐시 fetch용 (프로젝트 admin 계정 토큰). 폴 드레인의 posts 조회도 이 토큰. |
+| `DOORAY_API_KEY` | ✓ | 멤버 캐시 fetch · 폴 드레인 posts 조회용. **이 토큰의 계정이 `TASK_HUB_PROJECT_IDS` 의 모든 프로젝트에 접근 가능해야 함** (2026-09-24 Kirin 계정 토큰으로 교체 — 봇 계정은 일부 프로젝트 멤버가 아니라서). |
 | `DOORAY_BASE_URL` | | default `https://api.dooray.com`. 클라우드별 override. |
 | `TASK_HUB_WEBHOOK_TOKEN` | ✓ | URL secret path token. |
 | `TASK_HUB_PROJECT_IDS` | ✓ | 멤버 캐시 · 폴 드레인 대상 프로젝트 id, 쉼표 구분 (public 프로젝트 위주). |
@@ -116,6 +116,9 @@ Tunnel(현재 Tailscale Funnel)은 receiver 컨테이너 밖 host 에서 별도�
 - **2026-09-16** postCommentCreated / postWorkflowChanged payload 에 assignee 정보 부재 발견 → 파서에 top-level `users.to` fallback 추가 + `post_assignees` API fallback (Dooray truth 원칙).
 - **2026-09-20** 폴 드레인 추가 (v0.2.1). 에이전트-side drain 을 receiver 로 이관. 드레인 전략을 서버에 두어 세션 형태(/loop vs --continue)에 종속되지 않게 함.
 - **2026-09-20** Cloudflare Quick Tunnel → Tailscale Funnel (v0.4). Public URL `https://kirins-mac-mini.tail465f29.ts.net/`. Dooray Sandbox hook 재등록 (id `4426061117507948068`, 옛 hook 은 웹UI 삭제 대기).
+- **2026-09-22** 대상 프로젝트에 AI-Team-Management 추가. hawkeye · breda · falman 봇 계정 온보딩 — userCode 규약 일치라 `mapping.yaml` 없이 member cache 5명.
+- **2026-09-24** 대상 프로젝트에 SNS-Publishing 추가 (현재 Sandbox · AI-Team-Management · SNS-Publishing). 봇 계정이 SNS-Publishing 멤버가 아니라 `DOORAY_API_KEY` 를 Kirin 계정 토큰으로 교체.
+- **운영 주의**: `.env` 변경은 `docker compose restart` 로 반영되지 않음 (컨테이너 생성 시점 env 고정). `docker compose up -d --force-recreate` 필요.
 
 ## 미결
 
