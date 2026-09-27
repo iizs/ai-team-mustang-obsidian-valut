@@ -94,4 +94,5 @@ Kirin이 쓴 글을 Falman이 검토·번역하고 여러 SNS에 발행하는 �
 **2026-09-27 publish-wordpress**
 - ✅ Media 업로드 → 대표 이미지 지정 → 본문 맨 위 가운데 정렬 이미지(라이브러리에서 선택) → 본문 붙여넣기 → Save draft → Drafts 목록 확인.
 - 블록 에디터가 Dooray 마크다운 붙여넣기를 제목·문단·링크 블록으로 변환한다. `\_`·`\&` 이스케이프가 든 링크도 정상. 따라서 Facebook과 달리 텍스트 변환이 필요 없다.
-- 테스트 잔여물 (Kirin 삭제 필요): Drafts의 `[Falman Test] WordPress draft skill check` (post 577), Media의 `falman-wp-test`.
+- 테스트 잔여물 Drafts `[Falman Test] WordPress draft skill check` (post 577), Media `falman-wp-test`: Kirin이 삭제 완료 (2026-09-27).
+- 첫 실사용: SNS-Publishing/5 → post 582 드래프트 (2026-09-27).
