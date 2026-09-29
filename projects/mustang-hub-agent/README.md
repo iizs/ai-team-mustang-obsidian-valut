@@ -193,6 +193,8 @@ Skill 안에서 agent 이름 필요 시 `$JOURNAL_AGENT_NAME` 참조.
 - **2026-09-16** 실 세션 e2e 최초 실증. Kirin 웹UI 태스크 생성 → hub skill 자동 호출 → 처리 완결 확인. Payload assignee 위치 불일치 버그(4~5건 dropped_no_target) 발견 → parser fallback + API fallback 로 수정.
 - **2026-09-16** Dooray 사용 규범 확정 — 라우팅은 assignee 만 사용, 반응 필요한 코멘트는 반드시 assignee 도 함께 변경 (mention 라우팅 미도입).
 - **2026-09-20** **드레인 전략을 receiver-side 로 이관** (mustang-hub v0.2.1). 배경: `ScheduleWakeup` 이 `/loop dynamic` 모드 전용이라 `--continue` 세션에선 60분 안전망 wake-up 이 작동 안 함. Skill 을 lifecycle 관리 주체에서 notification 소비자로 축소 — 세션 시작 드레인 · 60분 안전망 · CLAUDE.md 강한 트리거 문구 세 개가 다 사라짐. Skill 은 notification-driven only.
+- **2026-09-28** hub skill 액션 판단 룰에 **자기 할당 태스크 예외** 추가 — 지시자·담당자가 모두 나면 마지막 코멘트가 나여도 "액션 필요". 작업 중 파생 태스크를 자기에게 할당한 경우 "대기"로 오분류돼 방치되고, 폴 드레인도 updatedAt 변화 없으면 재전달 안 해서 묻히는 구멍을 막음 (mustang-hub-agent `9fe5e4d`). 참고: 에이전트가 API 로 만든 자기 할당 태스크의 webhook 은 self-loop 필터로 안 가지만 폴 드레인이 10분 안에 전달.
+- **2026-09-29** **consumer 를 플러그인 전용 `.venv` 로 고정.** 정전 재부팅 후 세션 PATH 에서 Homebrew Python 3.14(`websockets` 없음)가 먼저 잡혀 전 에이전트 모니터가 `missing_dependency` 로 종료. 모니터 명령을 `scripts/run-consumer.sh` 로 바꿔 `.venv/bin/python` 으로 `ws-consumer.py` 실행 (venv 없으면 설치 명령을 담은 `missing_venv` 한 줄 출력). `.venv` 는 `/usr/bin/python3` 기준 — dooray-skill · discord-agent-runner venv 와 동일 (mustang-hub-agent `d39443c`). 설치: `/usr/bin/python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`.
 
 ## 미결 · 확인 대기
 
