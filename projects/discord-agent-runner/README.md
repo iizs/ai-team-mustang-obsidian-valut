@@ -90,9 +90,14 @@ ai-teams/scripts/
 - **로그**: `discord-agent-runner/logs/<agent>.log`
 - **부팅 자동화**: 이 iteration scope 밖 (별도 논의)
 
+## 운영 보강 (2026-09-29)
+
+- **기동 재시도**: 최초 로그인·게이트웨이 접속이 네트워크성 오류(aiohttp · OSError · timeout · GatewayNotFound · Discord 5xx)로 실패하면 5s → 60s 백오프로 무한 재시도. discord.py 자동 재연결은 한 번 접속한 뒤에만 동작해서 필요. 시도마다 클라이언트를 새로 만듦 (닫힌 Client 재사용 불가). `LoginFailure` · 그 외 예외는 `logs/<agent>.log` 에 traceback 남기고 종료. 배경: 09-28 정전 재부팅 직후 네트워크 전에 떠서 lust 가 로그인 실패로 종료.
+- **실행 출력 로테이트**: start 스크립트가 `run/<agent>.out` 을 덮어쓰지 않고 `.out.1` ~ `.out.3` 으로 밀어 과거 3회분 보관 (크래시 원인이 재시작으로 지워지던 문제).
+
 ## 미결 · 확인 대기
 
-- **부팅 자동화 (launchd LaunchAgent)** — 별도 iteration.
+- **부팅 자동화 (launchd LaunchAgent)** — 별도 iteration. 현재는 tmux launcher(`start-team-homunculus.sh`)로 기동, 네트워크 대기는 기동 재시도가 흡수.
 - **로그 rotation** — 지금 append-only. 규모 커지면 logrotate 나 handler 교체.
 - **응답이 매우 오래 걸리는 경우** (Claude tool use 여러 turn) — Discord typing indicator 는 10초마다 재전송이 필요할 수 있음. 지금 코드는 `async with channel.typing()` 컨텍스트 매니저에 위임. 필요하면 자체 heartbeat 로 대체.
 - **에러 응답 UX** — 현재는 `⚠️ ...` prefix 로 사용자에게 노출. 로그로만 남기고 사용자엔 간결한 메시지로 갈지 검토.
