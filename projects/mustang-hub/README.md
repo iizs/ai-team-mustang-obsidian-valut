@@ -35,6 +35,8 @@ Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 G
 
 **순서 무관** — 세 컴포넌트가 각자 재시도/복원 매커니즘을 가짐. Tailscale 이 receiver 보다 먼저 뜨면 잠깐 502, receiver 가 먼저 뜨면 tailscale 복원 대기. 그 사이 발생한 webhook 은 폴 드레인이 rescue. WS 세션은 5초 재접속 loop 로 결국 붙음.
 
+**네트워크보다 먼저 뜨는 경우** (2026-09-28 정전에서 실제 발생): receiver 가 기동 시 멤버 캐시를 못 채우면 예전엔 캐시 0명으로 계속 돌아 모든 전달이 멈췄음. 2026-09-30 부터 기동은 계속하고 백그라운드에서 5s→60s 백오프로 재시도, 이후에도 모르는 담당자·에이전트를 만나면 캐시를 다시 채움 (60초 rate limit). 조회가 일부 실패하면 기존 캐시는 유지.
+
 ## Dooray webhook payload 관찰 사항
 
 문서와 실제 응답 차이:
@@ -118,6 +120,7 @@ Tunnel(현재 Tailscale Funnel)은 receiver 컨테이너 밖 host 에서 별도�
 - **2026-09-20** Cloudflare Quick Tunnel → Tailscale Funnel (v0.4). Public URL `https://kirins-mac-mini.tail465f29.ts.net/`. Dooray Sandbox hook 재등록 (id `4426061117507948068`, 옛 hook 은 웹UI 삭제 대기).
 - **2026-09-22** 대상 프로젝트에 AI-Team-Management 추가. hawkeye · breda · falman 봇 계정 온보딩 — userCode 규약 일치라 `mapping.yaml` 없이 member cache 5명.
 - **2026-09-24** 대상 프로젝트에 SNS-Publishing 추가 (현재 Sandbox · AI-Team-Management · SNS-Publishing). 봇 계정이 SNS-Publishing 멤버가 아니라 `DOORAY_API_KEY` 를 Kirin 계정 토큰으로 교체.
+- **2026-09-30** 멤버 캐시 복원력 보강 (mustang-hub `7e58a6a`). 09-28 정전 재부팅 직후 네트워크 전에 기동 → 캐시 프라이밍 전부 실패(size 0) → 재구성 로직이 없어 이틀 가까이 webhook 은 `dropped_unresolved`, 폴 드레인은 `poll.agent_unresolved` 로 전달 0건. 재시작으로 즉시 복구 후 기동 재시도 · on-demand 재구성 · 실패 시 기존 캐시 보존 추가. `--network none` 컨테이너로 기동 → 네트워크 연결 시 자동 회복 확인.
 - **운영 주의**: `.env` 변경은 `docker compose restart` 로 반영되지 않음 (컨테이너 생성 시점 env 고정). `docker compose up -d --force-recreate` 필요.
 
 ## 미결
