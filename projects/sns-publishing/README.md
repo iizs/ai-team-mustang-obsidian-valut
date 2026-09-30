@@ -16,7 +16,7 @@ Kirin이 쓴 글을 Falman이 검토·번역하고 여러 SNS에 발행하는 �
 | 스킬 | 상태 |
 |---|---|
 | `publish-facebook` | 임시저장·예약 검증 완료, 즉시 게시 미검증 |
-| `publish-linkedin` | 스펙 확정, 스킬 작성 (2026-09-29). 실사용 미검증 |
+| `publish-linkedin` | 드래프트 검증 완료 (2026-09-30, SNS-Publishing/6) |
 | `publish-wordpress` | 드래프트 검증 완료 (WordPress.com) |
 
 ## publish-facebook 스펙
@@ -122,6 +122,11 @@ Kirin이 쓴 글을 Falman이 검토·번역하고 여러 SNS에 발행하는 �
 **중지 조건**: 로그인 풀림, 기존 드래프트 존재, WP URL 없음(WP 미게시), 한글 원고로 지시받음.
 
 **WP URL 가져오기**: LinkedIn 태스크 본문에 연결된 WP 태스크의 "게시 URL" 댓글에서 가져온다. 없으면 연결된 WP 태스크의 post ID로 `?p=<ID>` 리다이렉트를 확인한다. 그래도 게시 전이면 중지·리포트한다.
+
+## 다음 과제 (2026-09-30)
+
+- **개별 스킬 연결**: 교정 → 번역 → FB/WP/LinkedIn 드래프트를 한 흐름으로 엮는다. 지금은 단계마다 Kirin이 태스크를 따로 만든다. LinkedIn은 WP 게시 URL이 필요하므로 WP 게시 후 단계가 된다.
+- **재시작 후 브라우저 선택 문제**: 재부팅 후 Claude 확장 연결 이름이 "Browser 1/2"로 초기화되고, 여러 프로필이 동시에 연결돼 "Chrome for Falman"(Chrome 프로필 "MacMini")을 구분할 수 없었다. 2026-09-29에는 `switch_browser` 확인 창으로 Kirin이 직접 골라서 해결했다.
 
 ## 테스트 정책
 
