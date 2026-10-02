@@ -123,6 +123,16 @@ Tunnel(현재 Tailscale Funnel)은 receiver 컨테이너 밖 host 에서 별도�
 - **2026-09-30** 멤버 캐시 복원력 보강 (mustang-hub `7e58a6a`). 09-28 정전 재부팅 직후 네트워크 전에 기동 → 캐시 프라이밍 전부 실패(size 0) → 재구성 로직이 없어 이틀 가까이 webhook 은 `dropped_unresolved`, 폴 드레인은 `poll.agent_unresolved` 로 전달 0건. 재시작으로 즉시 복구 후 기동 재시도 · on-demand 재구성 · 실패 시 기존 캐시 보존 추가. `--network none` 컨테이너로 기동 → 네트워크 연결 시 자동 회복 확인.
 - **운영 주의**: `.env` 변경은 `docker compose restart` 로 반영되지 않음 (컨테이너 생성 시점 env 고정). `docker compose up -d --force-recreate` 필요.
 
+## 폴링 동작 특성 (2026-10-02 코드 리뷰)
+
+수정 결정 없이 현 동작을 정리한 것. 진입은 `Poller.run()` (interval 만큼 먼저 잠든 뒤 `_tick()`).
+
+- **중복 방지**: `_last_updated[(agent, post_id)] = 마지막으로 보낸 updatedAt` (메모리). 값이 같으면 안 보내고, 전송 성공 시에만 갱신. `_prune_state` 가 끊긴 에이전트·목록에서 빠진 업무의 기록을 지움 — 재접속한 새 세션이 대기 업무를 다시 받는 근거.
+- **새 업무는 알림 2번**: webhook 즉시 1번 + 다음 tick 의 `pollDrain` 1번. 두 경로는 서로의 전달 기록을 모름 (의도된 설계, 중복은 hub skill 이 거름).
+- **조회 실패 → 재전달**: 한 프로젝트 목록 조회가 실패하면 그 업무들의 기록이 지워져 다음 성공 tick 에 변화 없어도 다시 보냄. 결과는 알림 한 번 더라 감수.
+- **재시작 시**: 기록이 사라져 첫 tick(기동 10분 후)에 대기 업무 전부 재전송.
+- **이벤트 루프 블로킹**: `poller.py` 의 `list_pending_posts` 와 `main.py` 의 `post_assignees` 가 `requests` 동기 호출이라, 도는 동안 webhook 처리 · WS 전송 · keepalive 가 멈춤. 평소 tick 당 1~5초, Dooray 가 매달리면 최대 12×15초. 20초 넘게 막히면 consumer ping 타임아웃으로 에이전트 연결이 끊길 수 있음. `asyncio.to_thread` 로 감싸면 해소 (캐시 재구성은 이미 그렇게 함).
+
 ## 미결
 
 - Receiver dedup 정책 (event_id 저장 방식 · TTL) — v0.3에서.
