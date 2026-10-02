@@ -128,7 +128,8 @@ Kirin이 쓴 글을 Falman이 검토·번역하고 여러 SNS에 발행하는 �
 - **개별 스킬 연결**: 교정 → 번역 → FB/WP/LinkedIn 드래프트를 한 흐름으로 엮는다. 지금은 단계마다 Kirin이 태스크를 따로 만든다. LinkedIn은 WP 게시 URL이 필요하므로 WP 게시 후 단계가 된다.
 - **재시작 후 브라우저 선택 문제**: 재부팅 후 Claude 확장 연결 이름이 "Browser 1/2"로 초기화되고, 여러 프로필이 동시에 연결돼 "Chrome for Falman"(Chrome 프로필 "MacMini")을 구분할 수 없었다. 2026-09-29에는 `switch_browser` 확인 창으로 Kirin이 직접 골라서 해결했다.
   - ✅ 자동 실행 (2026-10-02): LaunchAgent `~/Library/LaunchAgents/net.iizs.chrome-falman.plist`가 로그인 시 `open -na "Google Chrome" --args --profile-directory="Profile 4"`(= "MacMini" 프로필)를 실행한다. 자동 로그인 ON, FileVault OFF. 창을 닫으면 다시 뜨지 않으니 `launchctl start net.iizs.chrome-falman`으로 다시 띄운다.
-  - ⬜ 남은 것: Claude 확장을 MacMini 프로필에만 켜서 연결 목록에 하나만 뜨게 할지.
+  - ✅ 확장 정리 (2026-10-02): Claude 확장을 MacMini 프로필에서만 켜고 다른 프로필은 모두 껐다. 연결 목록에 브라우저가 하나만 뜨는 것 확인 (deviceId `18ae36fd…`).
+  - ✅ 발행 스킬 3종은 시작 시 연결된 브라우저가 없으면 MacMini 프로필 창을 직접 띄운다.
 
 ## 테스트 정책
 
