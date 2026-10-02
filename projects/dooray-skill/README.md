@@ -1,6 +1,6 @@
 # dooray-skill
 
-_2026-09-09 착수 · v0.5 완료 (2026-09-26 첨부파일)_
+_2026-09-09 착수 · v0.6 완료 (2026-10-02 오류 처리)_
 
 Mustang 팀 에이전트가 Dooray를 사용하기 위한 Claude Code skill + 지원 라이브러리. [[projects/team-operations-rework/README]] 의 협업 환경 축(② 업무 채널) 을 실체화한다.
 
@@ -53,6 +53,12 @@ Kirin이 지정한 범위 전부 커버:
 - ✅ 댓글 첨부: `log-create` · `log-update` 에 `--attach <path>` (업로드 후 연결) · `--attach-file-id <id>`
 - Dooray 모델: 업무에 올린 파일은 전부 업무 파일 풀(`task.files`)에 들어가고, 댓글 첨부는 그 파일 id 를 `attachFileIds` 로 참조. 댓글별 첨부는 `log-get` 의 `files[].id` 로만 확인 가능 (`logs-list` 응답엔 없음).
 - 파일 API 는 `api.dooray.com` 이 307 로 `file-api.dooray.com/{uploads|downloads}/...` 를 가리킴 — URL 을 직접 조립하지 않고 Location 을 인증 헤더 유지한 채 수동으로 따라감 (requests 기본 리다이렉트는 다른 호스트에서 Authorization 을 뗌).
+
+**v0.6 — 완료 (2026-10-02)** 오류 처리 (Falman 제안).
+- ✅ 읽기(GET) 자동 재시도: 5xx · 타임아웃 · 연결 오류에 1s→2s 백오프, 최대 3회. 첨부 다운로드 도중 끊김도 재수신.
+- ✅ 쓰기는 재시도 안 함. 단, 요청이 서버에 닿기 전 실패(연결 거부 · DNS · 연결 타임아웃)는 안전하니 재시도.
+- ✅ 실패 출력: traceback 대신 stderr JSON 한 줄 + 종료 코드 — 3 일시적 · 4 영구적 · 5 결과 불확실(쓰기 5xx 등, 반영 여부 확인 후 재시도) · 1 예상 밖. SKILL.md 에 대응 표.
+- 제안 4번(`task-files-list` 매번 500)은 재현 안 됨 — 일시적 Dooray 장애로 정리.
 
 **후보**
 - 다른 봇 유저(Breda/Hawkeye 등) 계정 부여 — 2026-09-22 완료 (env 기반)
@@ -149,6 +155,7 @@ _(op 명명 규칙은 v0.1 구현하며 확정)_
 - **2026-09-10** 인증 방식 재설계 (v0.3). Kirin 지시: skill 스코프 좁게 (`DOORAY_API_KEY` 명확한 env 변수), 파일 기본 경로 `~/.dooray/tokens/key`, 둘 다 없으면 에러. `agent` 인자 완전 제거 — identity는 token 자체가 정하고, 봇마다 launcher env로 주입되는 방식으로 정착. `~/.dooray/tokens/<agent>` 개별 파일 관례는 폐기.
 - **2026-09-14** v0.4 `hook-create` (mustang-hub receiver 연동용 webhook 등록).
 - **2026-09-26** v0.5 첨부파일 (Kirin 지시, Roy 단독 진행). Sandbox 실측으로 file-api 경로 prefix(`/uploads`, `/downloads`) 와 댓글 첨부 연결 방식 확인 후 구현. 유닛 79 · 통합 13 통과, CLI 경로 실측 확인.
+- **2026-10-02** v0.6 오류 처리. 09-27·09-30 Dooray 500 반복에 대한 Falman 제안 1~3 반영 (Roy 의견: 쓰기 5xx 를 '결과 불확실'로 별도 분류, 연결 단계 실패는 쓰기도 재시도). 테스트로 `ChunkedEncodingError` 참조 오류(최상위 아님) 발견·수정. 유닛 92 · 통합 13 (dooray-skill `3bf6c2b`).
 
 ## 미결 / 다음 단계
 
