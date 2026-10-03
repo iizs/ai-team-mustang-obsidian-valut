@@ -22,6 +22,8 @@ Task Hub receiver. Cloudflare Tunnel 뒤에서 외부 webhook(Dooray · 추후 G
 - 현재 `https://kirins-mac-mini.tail465f29.ts.net/` (Mac mini 재부팅에도 유지).
 - `tailscale funnel --bg 8080` 으로 port 443 공개 → localhost:8080 프록시. Tailscale 관리 콘솔에서 (1) DNS "HTTPS Certificates" 활성 (2) `nodeAttrs: [{target:["*"], attr:["funnel"]}]` 사전 세팅 필요.
 - 이관 배경: Quick Tunnel 은 실행마다 URL 이 바뀌어 `.env` 갱신·훅 재등록 필요. Named domain 대안 검토 후 개인 도메인 없는 조건에서 Tailscale Funnel 채택 (개인 tailnet 무료 · HTTPS 자동 · 관리 편함).
+- **공개 DNS 레코드 누락 (2026-10-03)**: 10-02 21:38 UTC 이후 모든 프로젝트 webhook 이 Dooray 쪽에서 실패 (응답 로그 없음). Funnel 설정 · 노드 · 인증서 모두 정상이었지만 ts.net 권한 네임서버(dnsimple)가 호스트명에 NXDOMAIN. 이 맥미니에서는 MagicDNS 로 tailnet IP 가 풀려 정상처럼 보임. Tailscale 앱 업데이트(1.96.5 → 1.102.4) · 재시작 후 `funnel reset` + `funnel --bg 8080` 재적용하자 몇 분 안에 레코드 복귀 (어느 쪽이 고쳤는지는 불분명). 그 사이 폴링이 전달을 대신함.
+  - 점검: `dig @ns1.dnsimple.com kirins-mac-mini.tail465f29.ts.net A +norecurse` — Funnel 중계 IP(208.111.x.x)가 나와야 정상. 로컬 `curl` · `dig` 은 MagicDNS 때문에 판단 근거가 안 됨.
 
 ## 재부팅 자동 복구 체인
 
@@ -120,6 +122,7 @@ Tunnel(현재 Tailscale Funnel)은 receiver 컨테이너 밖 host 에서 별도�
 - **2026-09-20** Cloudflare Quick Tunnel → Tailscale Funnel (v0.4). Public URL `https://kirins-mac-mini.tail465f29.ts.net/`. Dooray Sandbox hook 재등록 (id `4426061117507948068`, 옛 hook 은 웹UI 삭제 대기).
 - **2026-09-22** 대상 프로젝트에 AI-Team-Management 추가. hawkeye · breda · falman 봇 계정 온보딩 — userCode 규약 일치라 `mapping.yaml` 없이 member cache 5명.
 - **2026-09-24** 대상 프로젝트에 SNS-Publishing 추가 (현재 Sandbox · AI-Team-Management · SNS-Publishing). 봇 계정이 SNS-Publishing 멤버가 아니라 `DOORAY_API_KEY` 를 Kirin 계정 토큰으로 교체.
+- **2026-10-03** 대상 프로젝트에 Atelier 추가 (현재 Sandbox · AI-Team-Management · SNS-Publishing · Atelier). webhook 은 Roy 계정으로 `hook-create` — 프로젝트 관리자 권한 필요 (멤버만으로는 403).
 - **2026-09-30** 멤버 캐시 복원력 보강 (mustang-hub `7e58a6a`). 09-28 정전 재부팅 직후 네트워크 전에 기동 → 캐시 프라이밍 전부 실패(size 0) → 재구성 로직이 없어 이틀 가까이 webhook 은 `dropped_unresolved`, 폴 드레인은 `poll.agent_unresolved` 로 전달 0건. 재시작으로 즉시 복구 후 기동 재시도 · on-demand 재구성 · 실패 시 기존 캐시 보존 추가. `--network none` 컨테이너로 기동 → 네트워크 연결 시 자동 회복 확인.
 - **운영 주의**: `.env` 변경은 `docker compose restart` 로 반영되지 않음 (컨테이너 생성 시점 env 고정). `docker compose up -d --force-recreate` 필요.
 
