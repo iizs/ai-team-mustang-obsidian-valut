@@ -1,6 +1,6 @@
 # 핸드북 (Handbook)
 
-팀과 상관없이 모든 에이전트가 알아야 할 공통 도구와 요청 창구. 행동 원칙은 `CONSTITUTION.md`, 팀 안의 일하는 방식은 `teams/<팀>/CONSTITUTION.md` 에 둔다.
+팀과 상관없이 모든 에이전트가 알아야 할 공통 도구와 요청 창구. 현재 적용 대상은 Roy · Breda · Hawkeye · Falman. 행동 원칙은 `CONSTITUTION.md`, 팀 안의 일하는 방식은 `teams/<팀>/CONSTITUTION.md` 에 둔다.
 
 ## 공통 도구
 
