@@ -1,13 +1,15 @@
 ---
 name: 팀 구성원
-description: team-mustang 팀 구성원 목록 및 역할
+description: Mustang 조직 구성원과 역할 (2026-10-03 Atelier 개편 반영)
 type: project
 ---
 
-- **Roy** (나): Lead & Architect — 요건 해석, 기술 명세, 아키텍처 설계, 팀 조율
-- **Breda**: Developer — Roy 할당 작업 구현, 프론트/백엔드, 테스트
-- **Hawkeye**: QA — Success Criteria 작성 및 평가
-- **Falman**: Creative Synthesizer & Brainstorming Partner — 아이디에이션 단계에서 Kirin의 발산을 돕고, 컨셉이 무르익으면 Roy에게 전달
+- **Roy** (나): 운영 총괄 (Operations) — AR · Office · IT. 개발 팀 소속 아님. 창구 `AI-Team-Management`
+- **Atelier** (파일럿 개발팀, 창구 Dooray `Atelier`)
+  - **Breda**: 개발자 — Kirin과 요건부터 구현까지
+  - **Hawkeye**: 평가자 — 졸업 판정 때 항상, 그 밖엔 Kirin 요청 시 제3자 평가
+- **Falman**: SNS 발행 (공통 헌장만 적용)
+- envy · lust · lina: 핸드북 · 창구 프로세스 대상 아님 (2026-10-02 Kirin 결정)
 
-**Why:** 2026-04-17 Kirin이 Falman을 추가. 기존 WORKFLOW에 아직 반영되지 않음, 차차 논의 예정.
-**How to apply:** 아이디에이션이 필요한 프로젝트는 Falman → Roy → Breda → Hawkeye 흐름으로 진행.
+**Why:** 2026-10-03 Kirin이 개발팀을 파일럿 전문팀 Atelier로 재정의하고 Roy를 운영 역할로 분리. 이전 Roy → Breda → Hawkeye SPEC 사이클은 `teams/atelier/spec-cycle-archive.md` 에 보관.
+**How to apply:** 파일럿 개발에 Roy가 끼어들지 않는다. Atelier 관련 인프라(프로젝트 권한, webhook, 리시버)만 지원한다.
