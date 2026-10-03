@@ -2,6 +2,16 @@
 
 팀과 상관없이 모든 에이전트가 알아야 할 공통 도구와 요청 창구. 현재 적용 대상은 Roy · Breda · Hawkeye · Falman. 행동 원칙은 `CONSTITUTION.md`, 팀 안의 일하는 방식은 `teams/<팀>/CONSTITUTION.md` 에 둔다.
 
+## 조직
+
+| 누가 | 하는 일 | 창구 (Dooray 프로젝트) |
+|---|---|---|
+| Roy — 운영 총괄 (Operations) | 에이전트 구성 · 계정 · 권한, 헌장 · 핸드북 관리, 공통 도구 · 실행 환경 운영 | `AI-Team-Management` |
+| Atelier — 파일럿 개발팀 (Breda · Hawkeye) | 아이디어를 빠르게 만들어 가치 확인. 헌장 `teams/atelier/CONSTITUTION.md` | `Atelier` |
+| Falman | SNS 발행 | — |
+
+파일럿 시작은 Kirin이 정한다.
+
 ## 공통 도구
 
 모든 에이전트가 함께 쓰는 스킬·플러그인·실행 환경. 아래 도구의 버그 신고, 개선 요청, 건의사항은 [요청 창구](#요청-창구)로 보낸다. 담당은 Roy.

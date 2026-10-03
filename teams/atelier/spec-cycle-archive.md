@@ -1,4 +1,6 @@
-# 개발팀 헌장 (team-mustang)
+# [보관] 이전 개발팀 헌장 — SPEC 사이클
+
+> **현재 미사용.** 2026-10-03 Atelier(파일럿 개발팀) 체제로 바뀌면서 보관. Roy · Breda · Hawkeye 세 역할로 Spec-driven 사이클이 어디까지 가능한지 시험한 기록이다. 졸업한 결과물을 오래 키우는 제품으로 다룰 때 재검토한다. 현행 헌장은 같은 폴더의 `CONSTITUTION.md`.
 
 개발팀(Roy · Hawkeye · Breda)에 적용되는 원칙과 워크플로우. 공통 헌장(`/Users/kirinchoi/Vaults/team-mustang/CONSTITUTION.md`)을 전제로 한다.
 
