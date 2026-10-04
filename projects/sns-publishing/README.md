@@ -18,6 +18,9 @@ Kirin이 쓴 글을 Falman이 검토·번역하고 여러 SNS에 발행하는 �
 | `publish-facebook` | 임시저장·예약 검증 완료, 즉시 게시 미검증 |
 | `publish-linkedin` | 드래프트 검증 완료 (2026-09-30, SNS-Publishing/6) |
 | `publish-wordpress` | 드래프트 검증 완료 (WordPress.com) |
+| `proofread` | 실사용 완료 (2026-10-04, SNS-Publishing/7) |
+| `translate` | 실사용 완료, v2 수정 반영 포함 (2026-10-04, SNS-Publishing/7) |
+| `sns-pipeline` | 첫 실전 완료 (2026-10-04, SNS-Publishing/7: FB + LI, WP 없음) |
 
 ## publish-facebook 스펙
 
@@ -125,7 +128,7 @@ Kirin이 쓴 글을 Falman이 검토·번역하고 여러 SNS에 발행하는 �
 
 ## 다음 과제 (2026-09-30)
 
-- **개별 스킬 연결 (오케스트레이션)**: 교정 → 번역 → FB/WP/LinkedIn 드래프트를 한 흐름으로 엮는다. 지금은 단계마다 Kirin이 태스크를 따로 만든다. 설계 메모는 아래 "오케스트레이션 설계 메모" 참고. 선행 과제였던 dooray-skill 오류 처리는 v0.6으로 완료 (2026-10-02).
+- ✅ **개별 스킬 연결 (오케스트레이션)**: `sns-pipeline` 스킬로 완료 (2026-10-04). 설계 메모는 아래 "오케스트레이션 설계 메모", 실전 기록은 "검증 기록" 참고. 선행 과제였던 dooray-skill 오류 처리는 v0.6으로 완료 (2026-10-02).
 
 ### 오케스트레이션 설계 메모 (2026-10-02)
 
@@ -189,13 +192,13 @@ Kirin이 쓴 글을 Falman이 검토·번역하고 여러 SNS에 발행하는 �
 - 서브태스크는 처음부터 다 만들어도 된다. 막혀 있는 동안에는 이벤트가 오지 않는다.
 - 막힌 단계를 여는 계기는 앞 단계 서브태스크의 이벤트다. 이벤트가 온 태스크에서 출발해 메인 태스크와 형제 서브태스크를 다시 읽고 다음 단계를 판단한다. 진행 상태를 따로 저장하지 않는다.
 
-**보강 목록**
-1. 오케스트레이션 스킬 (위 판단 로직)
-2. 교정·번역 스킬화 (맞춤법만 수정 원칙, 번역 톤, v2 댓글 형식)
-3. 메인 태스크 템플릿 (대상 플랫폼, 번역 톤, 첨부 이미지, 제목 지정 여부)
-4. 두레이 호출 실패 처리 규칙 (아래)
-5. 중복 이벤트 처리: 변화 하나에 이벤트가 두 번(즉시 + `pollDrain`) 온다. 마지막 댓글이 이미 처리한 것이면 넘어간다.
-6. Kirin 차례 표시: 서브태스크 담당자에 Kirin을 추가한다. Kirin이 댓글을 달면 Kirin 몫 상태는 Falman이 정리한다.
+**보강 목록** (2026-10-04 모두 완료)
+1. ✅ 오케스트레이션 스킬 → `sns-pipeline`
+2. ✅ 교정·번역 스킬화 → `proofread`, `translate`
+3. ✅ 메인 태스크 템플릿 → Dooray 템플릿 `SNS 발행 원고`
+4. ✅ 두레이 호출 실패 처리 규칙 (아래, dooray-skill v0.6)
+5. ✅ 중복 이벤트 처리: 마지막 댓글이 Falman이면 넘어간다 (`sns-pipeline` 4절)
+6. ✅ Kirin 차례 표시: 서브태스크 담당자에 Kirin을 추가한다. 서브태스크를 완료하면 함께 정리된다.
 
 **두레이 호출 실패 처리 규칙** (dooray-skill v0.6 기준, 2026-10-02)
 
@@ -218,6 +221,20 @@ CLI가 하는 것 (`3bf6c2b`): 읽기(GET)는 5xx·타임아웃·연결 오류�
   - ✅ 자동 실행 (2026-10-02): LaunchAgent `~/Library/LaunchAgents/net.iizs.chrome-falman.plist`가 로그인 시 `open -na "Google Chrome" --args --profile-directory="Profile 4"`(= "MacMini" 프로필)를 실행한다. 자동 로그인 ON, FileVault OFF. 창을 닫으면 다시 뜨지 않으니 `launchctl start net.iizs.chrome-falman`으로 다시 띄운다.
   - ✅ 확장 정리 (2026-10-02): Claude 확장을 MacMini 프로필에서만 켜고 다른 프로필은 모두 껐다. 연결 목록에 브라우저가 하나만 뜨는 것 확인 (deviceId `18ae36fd…`).
   - ✅ 발행 스킬 3종은 시작 시 연결된 브라우저가 없으면 MacMini 프로필 창을 직접 띄운다.
+
+## 실전 기록
+
+**2026-10-04 SNS-Publishing/7 "[원고] 데이터 스크래핑"** (`sns-pipeline` 첫 실전)
+- 설정: Facebook + LinkedIn, WordPress 없음, 이미지 없음, LinkedIn 제목 줄 생략, 영문 제목 비움(Falman 추천).
+- 흐름: 서브태스크 4개(`[교정]`·`[FB]`·`[번역]`·`[LI]`) 생성 → 교정 v1 OK → FB 드래프트 + 번역 → 번역 수정 6건 → v2 OK → LI 드래프트(링크 없는 전문, 2,044자) → Kirin 게시 → URL 기록 → 메인 완료.
+- Kirin은 Dooray 댓글("OK", 수정 요청, "게시했어")만으로 진행. 담당자 변경 불필요.
+- 중복 이벤트(`pollDrain`)는 "마지막 댓글이 Falman" 규칙으로 문제없이 걸러짐.
+- 실행 중 고친 것:
+  - `task-get` 응답에 version이 없어 `task-update --version` 잠금은 쓰지 않는다.
+  - `logs-list --order=-createdAt`처럼 `=`로 붙여 써야 한다 (띄우면 사용법 오류).
+  - LinkedIn: 드래프트가 있어도 피드에 `Start a post`로 보일 수 있다. 작성창을 열어 확인한다.
+  - 새 탭의 첫 `navigate`가 반영되지 않는 경우가 잦다. 한 번 더 이동하면 된다.
+- 교정 확인 사항 3건에 Kirin이 답 없이 "OK" → 반영하지 않은 v1을 최종본으로 처리.
 
 ## 테스트 정책
 
