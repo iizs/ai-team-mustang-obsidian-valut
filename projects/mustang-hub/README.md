@@ -123,6 +123,7 @@ Tunnel(현재 Tailscale Funnel)은 receiver 컨테이너 밖 host 에서 별도�
 - **2026-09-22** 대상 프로젝트에 AI-Team-Management 추가. hawkeye · breda · falman 봇 계정 온보딩 — userCode 규약 일치라 `mapping.yaml` 없이 member cache 5명.
 - **2026-09-24** 대상 프로젝트에 SNS-Publishing 추가 (현재 Sandbox · AI-Team-Management · SNS-Publishing). 봇 계정이 SNS-Publishing 멤버가 아니라 `DOORAY_API_KEY` 를 Kirin 계정 토큰으로 교체.
 - **2026-10-03** 대상 프로젝트에 Atelier 추가 (현재 Sandbox · AI-Team-Management · SNS-Publishing · Atelier). webhook 은 Roy 계정으로 `hook-create` — 프로젝트 관리자 권한 필요 (멤버만으로는 403).
+- **2026-10-03** 대상 프로젝트에 CU-Analytics 추가 (Lina 전용, 멤버 Kirin · Roy · Lina). 5개 프로젝트.
 - **2026-09-30** 멤버 캐시 복원력 보강 (mustang-hub `7e58a6a`). 09-28 정전 재부팅 직후 네트워크 전에 기동 → 캐시 프라이밍 전부 실패(size 0) → 재구성 로직이 없어 이틀 가까이 webhook 은 `dropped_unresolved`, 폴 드레인은 `poll.agent_unresolved` 로 전달 0건. 재시작으로 즉시 복구 후 기동 재시도 · on-demand 재구성 · 실패 시 기존 캐시 보존 추가. `--network none` 컨테이너로 기동 → 네트워크 연결 시 자동 회복 확인.
 - **운영 주의**: `.env` 변경은 `docker compose restart` 로 반영되지 않음 (컨테이너 생성 시점 env 고정). `docker compose up -d --force-recreate` 필요.
 
